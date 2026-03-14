@@ -85,3 +85,41 @@ class MarketReport(BaseModel):
     timestamp: float = Field(default_factory=time.time)
 
     model_config = {"use_enum_values": True}
+
+
+# ── Strategy models ───────────────────────────────────────────────────────────
+
+class StrategyModel(BaseModel):
+    """A single portfolio allocation strategy produced by the Strategy Agent."""
+
+    name: str = Field(..., description="e.g. 'Conservative', 'Balanced', 'Aggressive'")
+    allocations: dict[str, float] = Field(
+        ...,
+        description="protocol_name -> allocation percentage (values sum to ~100)",
+    )
+    expected_yield: float = Field(..., ge=0, description="Weighted expected APY (%)")
+    risk_score: int = Field(..., ge=1, le=10, description="1 = safest, 10 = riskiest")
+    liquidity_requirement: float = Field(
+        default=0.0, ge=0, description="Minimum TVL required across all pools (USD)"
+    )
+    rationale: str = Field(default="", description="Claude's explanation for the strategy")
+
+    @field_validator("allocations", mode="before")
+    @classmethod
+    def _coerce_allocations(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError("allocations must be a dict")
+        return {str(k): float(val) for k, val in v.items()}
+
+
+class StrategyBundle(BaseModel):
+    """The three strategies produced in one Strategy Agent cycle."""
+
+    conservative: StrategyModel
+    balanced: StrategyModel
+    aggressive: StrategyModel
+    based_on_sentiment: str = Field(default="neutral")
+    timestamp: float = Field(default_factory=time.time)
+
+    def as_list(self) -> list[StrategyModel]:
+        return [self.conservative, self.balanced, self.aggressive]
