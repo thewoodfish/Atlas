@@ -45,7 +45,7 @@ class Config:
         default_factory=lambda: int(os.getenv("SCAN_INTERVAL_SECONDS", "30"))
     )
     initial_portfolio_usdt: float = field(
-        default_factory=lambda: float(os.getenv("INITIAL_PORTFOLIO_USDT", "1000.0"))
+        default_factory=lambda: float(os.getenv("INITIAL_PORTFOLIO_USDT", "100000.0"))
     )
 
     # ── Risk constraints ─────────────────────────────────────────────────────

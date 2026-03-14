@@ -351,52 +351,135 @@ class MockWallet(BaseWallet):
         return txs
 
 
-# ── WDKWallet (optional) ──────────────────────────────────────────────────────
+# ── WDKWallet — HTTP client for the Node.js WDK microservice ─────────────────
 
-def _try_build_wdk_wallet() -> type | None:
-    """
-    Attempt to build a WDKWallet subclass if the WDK SDK is available.
-    Returns the class, or None if the SDK is not installed.
-    """
+_WDK_SERVICE_URL = os.getenv("WDK_SERVICE_URL", "http://localhost:3001")
+
+
+def _wdk_service_available() -> bool:
+    """Quick liveness check against the WDK service /health endpoint."""
     try:
-        import wdk  # type: ignore[import]  # noqa: F401
-    except ImportError:
-        return None
+        import urllib.request
+        with urllib.request.urlopen(f"{_WDK_SERVICE_URL}/health", timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
 
-    class WDKWallet(MockWallet):
-        """
-        WDK-backed wallet that performs real transaction signing.
-        Falls back to MockWallet simulation on signing errors.
-        """
 
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **kwargs)
-            try:
-                self._wdk_client = wdk.Client(
-                    rpc_url=config.tether_rpc_url,
-                    address=self.address,
+class WDKWallet(MockWallet):
+    """
+    WDK-backed wallet.  All balance queries and token sends go through the
+    Node.js WDK microservice (wdk_service/server.js).  The in-process
+    MockWallet accounting is kept in sync so the rest of Atlas sees a
+    consistent view of portfolio state even if the WDK service is offline.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._wdk_url = _WDK_SERVICE_URL
+        self._online = False
+        self._sync_address()
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _get(self, path: str) -> dict:
+        import json
+        import urllib.request
+        with urllib.request.urlopen(f"{self._wdk_url}{path}", timeout=5) as r:
+            return json.loads(r.read())
+
+    def _post(self, path: str, body: dict) -> dict:
+        import json
+        import urllib.request
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(
+            f"{self._wdk_url}{path}",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+
+    def _sync_address(self) -> None:
+        try:
+            resp = self._get("/wallet/address")
+            if resp.get("success"):
+                self.address = resp["data"]["address"]
+                self._online = True
+                logger.info(
+                    f"[WALLET] WDKWallet online — address={self.address}"
                 )
-                logger.info(f"[WALLET] WDKWallet connected — address={self.address}")
-            except Exception as exc:
-                logger.warning(
-                    f"[WALLET] WDK initialisation failed ({exc}), "
-                    "falling back to mock signing"
-                )
-                self._wdk_client = None
+        except Exception as exc:
+            logger.warning(
+                f"[WALLET] WDK service unreachable ({exc}), "
+                "running with MockWallet accounting only"
+            )
+            self._online = False
 
-        def _sign_tx(self, tx_data: dict) -> str:
-            if self._wdk_client is None:
-                return _make_tx_hash()
+    # ── Override deposit/withdraw to also call WDK service ───────────────────
+
+    def deposit(self, protocol: str, amount: float) -> TransactionRecord:
+        tx = super().deposit(protocol, amount)
+        if self._online:
             try:
-                return self._wdk_client.sign_and_send(tx_data)
+                # Record intent on-chain via WDK sign (no actual DeFi protocol
+                # integration yet — sign a structured message as audit trail)
+                self._post("/wallet/sign", {
+                    "message": (
+                        f"Atlas deposit: ${amount:.4f} USDT → {protocol} "
+                        f"hash={tx.tx_hash}"
+                    )
+                })
             except Exception as exc:
-                logger.error(f"[WALLET] WDK signing failed: {exc}")
-                return _make_tx_hash()
+                logger.debug(f"[WALLET] WDK sign for deposit skipped: {exc}")
+        return tx
 
-    return WDKWallet
+    def withdraw(self, protocol: str, amount: float) -> TransactionRecord:
+        tx = super().withdraw(protocol, amount)
+        if self._online:
+            try:
+                self._post("/wallet/sign", {
+                    "message": (
+                        f"Atlas withdraw: ${amount:.4f} USDT ← {protocol} "
+                        f"hash={tx.tx_hash}"
+                    )
+                })
+            except Exception as exc:
+                logger.debug(f"[WALLET] WDK sign for withdraw skipped: {exc}")
+        return tx
+
+    def send_usdt(self, to: str, amount: float) -> str:
+        """Send USDT on-chain via the WDK service. Returns tx hash."""
+        if not self._online:
+            raise RuntimeError("WDK service is offline")
+        resp = self._post("/wallet/send-usdt", {"to": to, "amount": str(amount)})
+        if not resp.get("success"):
+            raise RuntimeError(resp.get("error", "WDK send-usdt failed"))
+        return resp["data"]["tx_hash"]
+
+    def send_xaut(self, to: str, amount: float) -> str:
+        """Send XAUT (Tether Gold) on-chain via the WDK service. Returns tx hash."""
+        if not self._online:
+            raise RuntimeError("WDK service is offline")
+        resp = self._post("/wallet/send-xaut", {"to": to, "amount": str(amount)})
+        if not resp.get("success"):
+            raise RuntimeError(resp.get("error", "WDK send-xaut failed"))
+        return resp["data"]["tx_hash"]
+
+    def get_onchain_balances(self) -> dict:
+        """Return live on-chain balances from the WDK service."""
+        if not self._online:
+            return {}
+        try:
+            resp = self._get("/wallet/balance")
+            if resp.get("success"):
+                return resp["data"]
+        except Exception as exc:
+            logger.warning(f"[WALLET] WDK balance fetch failed: {exc}")
+        return {}
 
 
-WDKWallet = _try_build_wdk_wallet()
-
-# Export whichever wallet is available; callers import Wallet
-Wallet = WDKWallet if WDKWallet is not None else MockWallet
+# Export WDKWallet; it gracefully degrades when the service is offline.
+# Callers may also use MockWallet directly for pure simulation mode.
+Wallet = WDKWallet

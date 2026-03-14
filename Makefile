@@ -1,9 +1,10 @@
-.PHONY: install run-demo run-live test dashboard frontend clean
+.PHONY: install run-demo run-live test dashboard frontend wdk-service clean
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
 	pip install -r requirements.txt
 	cd atlas/dashboard/frontend && npm install --legacy-peer-deps
+	cd wdk_service && npm install
 
 # ── Run modes ─────────────────────────────────────────────────────────────────
 run-demo:
@@ -14,6 +15,10 @@ run-live:
 
 run-no-dashboard:
 	python main.py --no-dashboard
+
+# ── WDK microservice ──────────────────────────────────────────────────────────
+wdk-service:
+	cd wdk_service && node server.js
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 dashboard:

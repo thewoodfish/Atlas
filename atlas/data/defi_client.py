@@ -29,10 +29,12 @@ CACHE_TTL_SECONDS = 30
 MAX_RETRIES = 3
 BASE_BACKOFF_SECONDS = 1.0  # doubles on each retry
 
-# Stablecoin symbols we accept (case-insensitive match against pool symbol)
+# Stablecoin and gold-backed tokens we accept (case-insensitive match against pool symbol)
 _STABLECOIN_TOKENS = {
     "usdt", "usdc", "dai", "frax", "tusd", "busd", "lusd", "gusd",
     "usdd", "susd", "usdp", "fei", "mim", "rai", "crvusd", "pyusd",
+    # Tether Gold
+    "xaut",
 }
 
 # ── Mock data ─────────────────────────────────────────────────────────────────
@@ -97,6 +99,27 @@ _MOCK_OPPORTUNITIES: list[dict[str, Any]] = [
         "pool_type": PoolType.STABLE_SWAP,
         "chain": "Ethereum",
         "symbol": "FRAX/USDC",
+    },
+    # Tether Gold (XAUT) pools
+    {
+        "protocol": "Curve Finance",
+        "pool_id": "mock-curve-xaut-usdt",
+        "apy": 4.8,
+        "tvl_usd": 85_000_000,
+        "volatility_7d": 0.018,
+        "pool_type": PoolType.STABLE_SWAP,
+        "chain": "Ethereum",
+        "symbol": "XAUT/USDT",
+    },
+    {
+        "protocol": "Aave V3",
+        "pool_id": "mock-aave-xaut",
+        "apy": 3.2,
+        "tvl_usd": 42_000_000,
+        "volatility_7d": 0.022,
+        "pool_type": PoolType.LENDING,
+        "chain": "Ethereum",
+        "symbol": "XAUT",
     },
 ]
 

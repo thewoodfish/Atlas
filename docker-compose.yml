@@ -1,5 +1,24 @@
 services:
 
+  wdk-service:
+    build:
+      context: wdk_service
+      dockerfile: Dockerfile
+    container_name: atlas-wdk
+    ports:
+      - "3001:3001"
+    environment:
+      - WDK_SERVICE_PORT=3001
+      - WDK_SEED_PHRASE=${WDK_SEED_PHRASE:-}
+      - EVM_PROVIDER=${EVM_PROVIDER:-https://eth.drpc.org}
+      - NODE_ENV=${NODE_ENV:-production}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   api:
     build:
       context: .
@@ -15,6 +34,10 @@ services:
       - DASHBOARD_PORT=5000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=sqlite:////data/atlas.db
+      - WDK_SERVICE_URL=http://wdk-service:3001
+      - INITIAL_PORTFOLIO_USDT=${INITIAL_PORTFOLIO_USDT:-100000}
+    depends_on:
+      - wdk-service
     volumes:
       - atlas-data:/data
       - ./logs:/app/logs

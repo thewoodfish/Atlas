@@ -43,6 +43,10 @@ Thumbs.db
 logs/
 *.log
 
+# Node
+node_modules/
+wdk_service/node_modules/
+
 # Secrets
 .env
 secrets.json
