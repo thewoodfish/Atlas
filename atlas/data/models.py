@@ -219,3 +219,18 @@ class PortfolioSnapshot(BaseModel):
     pnl_usd: float   = Field(description="Profit/loss vs initial capital in USD")
     pnl_pct: float   = Field(description="Profit/loss as a percentage")
     timestamp: float = Field(default_factory=time.time)
+
+
+# ── Execution models ──────────────────────────────────────────────────────────
+
+class ExecutionReport(BaseModel):
+    """Result of one execution cycle by the Execution Agent."""
+
+    strategy_name: str
+    transactions: list[TransactionRecord] = Field(default_factory=list)
+    new_portfolio_snapshot: Optional[PortfolioSnapshot] = None
+    execution_time_ms: float = Field(default=0.0)
+    total_gas_used: float = Field(default=0.0, description="Estimated gas in USD")
+    skipped_protocols: list[str] = Field(default_factory=list)
+    trigger: str = Field(default="scheduled", description="'scheduled' | 'drift' | 'yield_drop' | 'emergency'")
+    timestamp: float = Field(default_factory=time.time)
