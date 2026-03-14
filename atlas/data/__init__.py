@@ -6,12 +6,15 @@ from atlas.data.models import (
     MarketSentiment,
     OpportunityModel,
     PoolType,
+    PortfolioSnapshot,
     RankedOpportunity,
     RiskAssessment,
     RiskFlag,
     SimulationResult,
     StrategyBundle,
     StrategyModel,
+    TransactionRecord,
+    TxType,
 )
 
 __all__ = [
@@ -22,10 +25,13 @@ __all__ = [
     "MarketSentiment",
     "OpportunityModel",
     "PoolType",
+    "PortfolioSnapshot",
     "RankedOpportunity",
     "RiskAssessment",
     "RiskFlag",
     "SimulationResult",
     "StrategyBundle",
     "StrategyModel",
+    "TransactionRecord",
+    "TxType",
 ]

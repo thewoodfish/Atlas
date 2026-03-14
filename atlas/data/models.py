@@ -182,3 +182,40 @@ class SimulationResult(BaseModel):
     rejection_reason: Optional[str] = Field(default=None)
     daily_snapshots: list[DailySnapshot] = Field(default_factory=list)
     timestamp: float = Field(default_factory=time.time)
+
+
+# ── Wallet models ─────────────────────────────────────────────────────────────
+
+class TxType(str, Enum):
+    DEPOSIT  = "deposit"
+    WITHDRAW = "withdraw"
+    SWAP     = "swap"
+    REBALANCE = "rebalance"
+
+
+class TransactionRecord(BaseModel):
+    """An immutable record of a simulated (or real) wallet transaction."""
+
+    tx_hash: str
+    tx_type: TxType
+    protocol: str
+    from_token: str = Field(default="USDT")
+    to_token: str   = Field(default="USDT")
+    amount_usd: float
+    timestamp: float = Field(default_factory=time.time)
+    status: str = Field(default="confirmed")
+
+    model_config = {"use_enum_values": True}
+
+
+class PortfolioSnapshot(BaseModel):
+    """Point-in-time view of the wallet's portfolio."""
+
+    total_value_usd: float
+    allocations: dict[str, float] = Field(
+        description="protocol -> USD amount currently deployed"
+    )
+    idle_usdt: float = Field(description="Undeployed USDT balance")
+    pnl_usd: float   = Field(description="Profit/loss vs initial capital in USD")
+    pnl_pct: float   = Field(description="Profit/loss as a percentage")
+    timestamp: float = Field(default_factory=time.time)
