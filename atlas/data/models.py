@@ -155,3 +155,30 @@ class RiskAssessment(BaseModel):
     timestamp: float = Field(default_factory=time.time)
 
     model_config = {"use_enum_values": True}
+
+
+# ── Simulation models ─────────────────────────────────────────────────────────
+
+class DailySnapshot(BaseModel):
+    """Portfolio value at end of one simulated day."""
+
+    day: int = Field(..., ge=0)
+    portfolio_value_usd: float
+    yield_earned_usd: float
+    cumulative_yield_usd: float
+
+
+class SimulationResult(BaseModel):
+    """Output from the Simulator for one approved strategy."""
+
+    strategy_name: str
+    principal_usd: float
+    projected_7d_yield: float = Field(description="Total yield over 7 days in USD")
+    projected_apy: float = Field(description="Annualised yield (%)")
+    estimated_gas_usd: float = Field(description="Estimated total gas cost in USD")
+    net_return: float = Field(description="projected_7d_yield minus estimated_gas_usd")
+    confidence_score: float = Field(ge=0.0, le=1.0, description="0-1 confidence in projection")
+    approved: bool = Field(description="False if net_return is negative")
+    rejection_reason: Optional[str] = Field(default=None)
+    daily_snapshots: list[DailySnapshot] = Field(default_factory=list)
+    timestamp: float = Field(default_factory=time.time)

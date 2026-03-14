@@ -1,5 +1,6 @@
 from atlas.data.defi_client import DeFiClient
 from atlas.data.models import (
+    DailySnapshot,
     FetchResult,
     MarketReport,
     MarketSentiment,
@@ -8,11 +9,13 @@ from atlas.data.models import (
     RankedOpportunity,
     RiskAssessment,
     RiskFlag,
+    SimulationResult,
     StrategyBundle,
     StrategyModel,
 )
 
 __all__ = [
+    "DailySnapshot",
     "DeFiClient",
     "FetchResult",
     "MarketReport",
@@ -22,6 +25,7 @@ __all__ = [
     "RankedOpportunity",
     "RiskAssessment",
     "RiskFlag",
+    "SimulationResult",
     "StrategyBundle",
     "StrategyModel",
 ]
