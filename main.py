@@ -40,6 +40,35 @@ def _configure_logging() -> None:
     )
 
 
+async def _preflight_check() -> None:
+    """
+    Validate that the Anthropic API key is reachable before starting the demo.
+    Fails fast with a clear error rather than surfacing 30 seconds into a cycle.
+    """
+    import anthropic
+    client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
+    try:
+        logger.info("Preflight: verifying Anthropic API key…")
+        await asyncio.wait_for(
+            client.messages.create(
+                model=config.claude_model,
+                max_tokens=8,
+                messages=[{"role": "user", "content": "ping"}],
+            ),
+            timeout=15,
+        )
+        logger.info("Preflight: Anthropic API key OK")
+    except asyncio.TimeoutError:
+        logger.error("Preflight FAILED: Anthropic API timed out (15 s). Check network.")
+        sys.exit(1)
+    except anthropic.AuthenticationError:
+        logger.error("Preflight FAILED: Invalid ANTHROPIC_API_KEY.")
+        sys.exit(1)
+    except Exception as exc:
+        logger.error(f"Preflight FAILED: {exc}")
+        sys.exit(1)
+
+
 async def run(demo: bool = False, with_dashboard: bool = True) -> None:
     from atlas.core.orchestrator import Orchestrator
 
@@ -88,8 +117,12 @@ def main() -> None:
         )
         sys.exit(1)
 
+    async def _main() -> None:
+        await _preflight_check()
+        await run(demo=args.demo, with_dashboard=not args.no_dashboard)
+
     try:
-        asyncio.run(run(demo=args.demo, with_dashboard=not args.no_dashboard))
+        asyncio.run(_main())
     except KeyboardInterrupt:
         logger.info("Atlas shut down gracefully.")
 

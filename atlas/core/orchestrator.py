@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from enum import Enum
 from typing import Any, Optional
@@ -61,7 +62,9 @@ class SystemState(str, Enum):
 
 
 RETRY_DELAY_SECONDS = 30
-LOOP_INTERVAL_SECONDS = 60  # minimum time between full cycles
+LOOP_INTERVAL_SECONDS = 60       # minimum time between full cycles (live mode)
+DEMO_LOOP_INTERVAL_SECONDS = 5   # fast loop in demo mode so cycle 2 fires quickly
+AGENT_TIMEOUT_SECONDS = 60       # max seconds to wait for any single agent/LLM call
 
 # ── SQLite persistence ────────────────────────────────────────────────────────
 
@@ -133,10 +136,14 @@ class Orchestrator:
     def __init__(
         self,
         demo: bool = False,
-        loop_interval: int = LOOP_INTERVAL_SECONDS,
+        loop_interval: int | None = None,
     ) -> None:
         self.demo = demo
-        self._loop_interval = loop_interval
+        self._loop_interval = (
+            loop_interval
+            if loop_interval is not None
+            else (DEMO_LOOP_INTERVAL_SECONDS if demo else LOOP_INTERVAL_SECONDS)
+        )
 
         # Shared state
         self._state = SystemState.IDLE
@@ -148,6 +155,13 @@ class Orchestrator:
         self._last_simulation: Optional[SimulationResult] = None
         self._last_execution_report: Optional[ExecutionReport] = None
         self._agent_errors: dict[str, str] = {}
+
+        # In demo mode, wipe any stale database so the dashboard starts clean
+        if demo and config.database_url.startswith("sqlite:///"):
+            db_path = config.database_url.replace("sqlite:///", "", 1)
+            if os.path.exists(db_path):
+                os.remove(db_path)
+                logger.info(f"[ORCHESTRATOR] Demo mode: removed stale database {db_path!r}")
 
         # Infrastructure
         self._wallet = MockWallet()
@@ -204,7 +218,9 @@ class Orchestrator:
 
     async def _step_scan(self) -> MarketReport:
         self._set_state(SystemState.SCANNING)
-        report = await self._market_analyst.run_once()
+        report = await asyncio.wait_for(
+            self._market_analyst.run_once(), timeout=AGENT_TIMEOUT_SECONDS
+        )
         self._last_market_report = report
         self._risk_manager.market_report = report
         # Keep execution agent's opportunity list fresh
@@ -219,7 +235,9 @@ class Orchestrator:
 
     async def _step_strategize(self, report: MarketReport) -> StrategyBundle:
         self._set_state(SystemState.STRATEGIZING)
-        bundle = await self._strategy_agent.process(report)
+        bundle = await asyncio.wait_for(
+            self._strategy_agent.process(report), timeout=AGENT_TIMEOUT_SECONDS
+        )
         self._last_strategy_bundle = bundle
         self._emit_event("strategy_bundle", {
             "conservative_yield": bundle.conservative.expected_yield,
@@ -230,7 +248,9 @@ class Orchestrator:
 
     async def _step_risk_check(self, bundle: StrategyBundle) -> RiskAssessment:
         self._set_state(SystemState.RISK_CHECK)
-        assessment = await self._risk_manager.process(bundle)
+        assessment = await asyncio.wait_for(
+            self._risk_manager.process(bundle), timeout=AGENT_TIMEOUT_SECONDS
+        )
         self._last_risk_assessment = assessment
         self._emit_event("risk_assessment", {
             "approved":             assessment.approved,
@@ -269,8 +289,9 @@ class Orchestrator:
     ) -> ExecutionReport:
         self._set_state(SystemState.EXECUTING)
         opps = [ro.opportunity for ro in report.top_opportunities]
-        exec_report = await self._execution_agent.execute(
-            assessment, simulation, opps
+        exec_report = await asyncio.wait_for(
+            self._execution_agent.execute(assessment, simulation, opps),
+            timeout=AGENT_TIMEOUT_SECONDS,
         )
         self._last_execution_report = exec_report
         snap = exec_report.new_portfolio_snapshot
