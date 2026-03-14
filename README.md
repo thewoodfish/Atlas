@@ -1,55 +1,182 @@
 # Atlas
 
-Atlas is autonomous onchain treasury infrastructure — a multi-agent system that continuously scans DeFi markets, generates portfolio strategies, enforces risk constraints, and executes rebalancing transactions without human intervention.
+**Autonomous onchain treasury infrastructure.** Atlas is a multi-agent system that continuously scans DeFi markets, generates portfolio strategies, enforces risk constraints, simulates outcomes, and executes rebalancing — without human intervention.
+
+---
 
 ## Architecture
 
 ```
-atlas/
-├── agents/          # Specialized AI agents
-│   ├── market_analyst.py   # Polls DeFi APIs for opportunities
-│   ├── strategy_agent.py   # Generates portfolio strategies via Claude
-│   ├── risk_manager.py     # Enforces risk constraints
-│   └── execution_agent.py  # Simulates onchain execution
-├── core/            # Orchestration & infrastructure
-│   ├── orchestrator.py     # Main agent loop (LangGraph)
-│   ├── wallet.py           # Wallet abstraction
-│   └── simulator.py        # Shadow portfolio simulator
-├── data/            # External data layer
-│   └── defi_client.py      # DeFiLlama / Aave / Curve clients
-├── dashboard/       # Monitoring UI
-│   ├── backend/            # Flask API
-│   └── frontend/           # React UI
-└── tests/
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ATLAS SYSTEM                                 │
+│                                                                       │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐           │
+│  │   Market     │    │   Strategy   │    │    Risk      │           │
+│  │   Analyst    │───▶│   Agent      │───▶│   Manager    │           │
+│  │              │    │              │    │              │           │
+│  │ DeFiLlama API│    │ Claude API   │    │ Hard rules + │           │
+│  │ Mock fallback│    │ 3 strategies │    │ Claude review│           │
+│  └──────────────┘    └──────────────┘    └──────┬───────┘           │
+│                                                  │                   │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────▼───────┐           │
+│  │  Execution   │◀───│  Simulator   │◀───│  Approved    │           │
+│  │  Agent       │    │              │    │  Strategy    │           │
+│  │              │    │ 7-day shadow │    │              │           │
+│  │  MockWallet  │    │ projection   │    └──────────────┘           │
+│  └──────┬───────┘    └──────────────┘                               │
+│         │                                                             │
+│  ┌──────▼───────────────────────────────────────────────────────┐   │
+│  │                      ORCHESTRATOR                             │   │
+│  │  IDLE→SCANNING→STRATEGIZING→RISK_CHECK→SIMULATING→EXECUTING  │   │
+│  │  →MONITORING→(REBALANCING)→IDLE                              │   │
+│  │  SQLite persistence · asyncio event bus · 60s loop           │   │
+│  └──────────────────────────────┬────────────────────────────────┘  │
+│                                 │                                     │
+│  ┌──────────────────────────────▼────────────────────────────────┐  │
+│  │                    DASHBOARD                                    │  │
+│  │  Flask REST API (/api/*)  ·  Flask-SocketIO (/ws/feed)        │  │
+│  │  React UI: Metrics · Portfolio · Agents · Feed · Tables       │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Agent Loop
+---
 
-1. **Market Analyst** — scans protocols every 30s, returns structured opportunities
-2. **Strategy Agent** — uses Claude to generate 2–3 portfolio allocations
-3. **Risk Manager** — validates strategies against hard constraints
-4. **Execution Agent** — executes approved strategies (simulated or live)
-5. **Orchestrator** — ties the loop together, persists state to SQLite
+## Agent Pipeline
+
+| Step | Agent | Description |
+|------|-------|-------------|
+| 1 | **Market Analyst** | Polls DeFiLlama every 30s; filters stablecoin pools; uses Claude to rank by risk-adjusted return → `MarketReport` |
+| 2 | **Strategy Agent** | Receives `MarketReport`; uses Claude to generate 3 strategies (Conservative / Balanced / Aggressive) → `StrategyBundle` |
+| 3 | **Risk Manager** | Layer 1: deterministic hard rules (max 40% concentration, TVL ≥ $10M, risk score ≤ 8, volatility flag). Layer 2: Claude qualitative review → `RiskAssessment` |
+| 4 | **Simulator** | 7-day shadow projection with gas + slippage models; rejects if net return < 0 → `SimulationResult` |
+| 5 | **Execution Agent** | Rebalances `MockWallet`; monitors positions every 60s for yield drops >20%, TVL < $5M, or drift >10pp |
+
+---
 
 ## Quick Start
 
 ```bash
-cp .env.example .env
-# Fill in ANTHROPIC_API_KEY and optional RPC/wallet vars
+# 1. Clone and enter the project
+git clone https://github.com/thewoodfish/Atlas.git
+cd Atlas
 
-pip install -r requirements.txt
-python main.py
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and set ANTHROPIC_API_KEY
+
+# 3. Install dependencies
+make install
+
+# 4. Run in demo mode (recommended first run)
+make run-demo
+
+# 5. In a separate terminal, start the frontend dev server
+make dashboard
+# → http://localhost:5173
 ```
 
-## Demo Scenario
+---
 
-Seeds a mock wallet with 1000 USDT, runs the full autonomous loop, and triggers a mid-run market condition change to demonstrate auto-rebalancing.
+## Demo Walkthrough
+
+The demo (`make run-demo` or `python main.py --demo`) seeds a wallet with **1000 USDT** and runs the full autonomous loop:
+
+1. **Cycle 1** — Atlas scans DeFi markets, generates 3 strategies, risk-checks them, simulates outcomes, and executes the best approved strategy.
+2. **Cycle 2** — A mid-run market shock is injected: Curve Finance APY drops to 1% and TVL falls to $4M. The position monitor detects the emergency condition and automatically exits the position.
+3. The dashboard shows the rebalancing in real time via WebSocket.
+
+---
+
+## Running Tests
+
+```bash
+make test
+# or with coverage:
+make test-coverage
+```
+
+76 tests across:
+- `tests/test_risk_manager.py` — all hard-rule constraints
+- `tests/test_simulator.py` — projection math, gas model, approval logic
+- `tests/test_wallet.py` — balance accounting, tx recording
+- `tests/test_api.py` — all REST endpoints
+
+---
+
+## Docker
+
+```bash
+# Copy and fill in env
+cp .env.example .env
+
+# Start full stack (API + React frontend)
+docker compose up --build
+
+# API:      http://localhost:5000
+# Frontend: http://localhost:3000
+```
+
+---
 
 ## Tech Stack
 
-- Python 3.11+
-- Anthropic SDK + LangGraph for agent orchestration
-- aiohttp for async DeFi API calls
-- Flask + React dashboard
-- SQLite for state persistence
-- Loguru for structured logging
+| Layer | Technology |
+|-------|-----------|
+| Agent reasoning | Anthropic SDK (`claude-sonnet-4-6`) |
+| Async runtime | Python 3.11+ `asyncio` |
+| DeFi data | DeFiLlama REST API + mock fallback |
+| Data models | Pydantic v2 |
+| HTTP client | aiohttp |
+| State persistence | SQLAlchemy + SQLite |
+| REST API | Flask 3 + Flask-CORS |
+| WebSocket | Flask-SocketIO |
+| Frontend | Vite + React + TailwindCSS + Recharts |
+| Logging | Loguru |
+| Testing | pytest |
+| Container | Docker + nginx |
+
+---
+
+## Project Structure
+
+```
+atlas/
+├── agents/
+│   ├── market_analyst.py   # DeFi opportunity scanner + Claude ranking
+│   ├── strategy_agent.py   # Claude-powered portfolio strategy generator
+│   ├── risk_manager.py     # Two-layer risk validation
+│   └── execution_agent.py  # Wallet rebalancer + position monitor
+├── core/
+│   ├── orchestrator.py     # State machine + agent pipeline + event bus
+│   ├── wallet.py           # MockWallet with SQLite tx persistence
+│   └── simulator.py        # 7-day shadow portfolio engine
+├── data/
+│   ├── defi_client.py      # DeFiLlama async client with cache + retry
+│   └── models.py           # All Pydantic models
+└── dashboard/
+    ├── backend/
+    │   ├── app.py          # Flask app factory
+    │   └── api.py          # REST endpoints + WebSocket feed
+    └── frontend/           # React dashboard (Vite)
+config.py                   # Centralised config from env vars
+main.py                     # Entry point (--demo / --no-dashboard)
+```
+
+---
+
+## Configuration
+
+All settings in `.env` (see `.env.example`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | — | **Required.** Your Anthropic API key |
+| `WALLET_ADDRESS` | `0x000…` | Mock wallet address |
+| `DEFI_LLAMA_BASE_URL` | `https://api.llama.fi` | DeFiLlama base URL |
+| `SCAN_INTERVAL_SECONDS` | `30` | How often Market Analyst polls |
+| `INITIAL_PORTFOLIO_USDT` | `1000` | Starting capital |
+| `MAX_PROTOCOL_ALLOCATION` | `0.40` | Max 40% per protocol |
+| `MIN_LIQUIDITY_USD` | `10000000` | Min $10M TVL |
+| `DASHBOARD_PORT` | `5000` | Flask dashboard port |
+| `LOG_LEVEL` | `INFO` | Logging level |

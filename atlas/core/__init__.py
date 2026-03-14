@@ -1,5 +1,7 @@
-from atlas.core.orchestrator import Orchestrator
 from atlas.core.wallet import MockWallet, Wallet
 from atlas.core.simulator import Simulator
 
-__all__ = ["Orchestrator", "MockWallet", "Wallet", "Simulator"]
+# Orchestrator is intentionally excluded here to avoid circular imports.
+# Import it directly: from atlas.core.orchestrator import Orchestrator
+
+__all__ = ["MockWallet", "Wallet", "Simulator"]

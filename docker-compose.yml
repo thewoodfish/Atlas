@@ -1,0 +1,40 @@
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: atlas-api
+    ports:
+      - "5000:5000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - WALLET_ADDRESS=${WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}
+      - DEFI_LLAMA_BASE_URL=${DEFI_LLAMA_BASE_URL:-https://api.llama.fi}
+      - DASHBOARD_HOST=0.0.0.0
+      - DASHBOARD_PORT=5000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=sqlite:////data/atlas.db
+    volumes:
+      - atlas-data:/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: atlas/dashboard/frontend
+      dockerfile: Dockerfile.frontend
+    container_name: atlas-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  atlas-data:
