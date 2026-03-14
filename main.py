@@ -46,17 +46,18 @@ async def run(demo: bool = False, with_dashboard: bool = True) -> None:
     orchestrator = Orchestrator(demo=demo)
 
     if with_dashboard:
-        # Start Flask dashboard in a background thread so the async loop runs
         import threading
         from atlas.dashboard.backend.app import create_app
 
-        app = create_app()
+        app, socketio = create_app(orchestrator=orchestrator)
         dashboard_thread = threading.Thread(
-            target=lambda: app.run(
+            target=lambda: socketio.run(
+                app,
                 host=config.dashboard_host,
                 port=config.dashboard_port,
                 debug=False,
                 use_reloader=False,
+                allow_unsafe_werkzeug=True,
             ),
             daemon=True,
         )
