@@ -6,6 +6,8 @@ from atlas.data.models import (
     OpportunityModel,
     PoolType,
     RankedOpportunity,
+    RiskAssessment,
+    RiskFlag,
     StrategyBundle,
     StrategyModel,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "OpportunityModel",
     "PoolType",
     "RankedOpportunity",
+    "RiskAssessment",
+    "RiskFlag",
     "StrategyBundle",
     "StrategyModel",
 ]

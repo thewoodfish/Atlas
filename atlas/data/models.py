@@ -123,3 +123,35 @@ class StrategyBundle(BaseModel):
 
     def as_list(self) -> list[StrategyModel]:
         return [self.conservative, self.balanced, self.aggressive]
+
+
+# ── Risk models ───────────────────────────────────────────────────────────────
+
+class RiskFlag(str, Enum):
+    CONCENTRATION = "concentration"       # >40% in one protocol
+    LOW_LIQUIDITY = "low_liquidity"       # TVL < $10M
+    HIGH_RISK_SCORE = "high_risk_score"   # risk_score > 8
+    HIGH_VOLATILITY = "high_volatility"   # volatility_7d > 15%
+    CORRELATION = "correlation"           # qualitative: Claude-identified
+    MARKET_CONDITIONS = "market_conditions"
+    OTHER = "other"
+
+
+class RiskAssessment(BaseModel):
+    """Output from the Risk Manager Agent."""
+
+    approved: bool = Field(..., description="Whether the selected strategy is approved")
+    selected_strategy: StrategyModel = Field(..., description="The strategy to execute")
+    risk_flags: list[RiskFlag] = Field(default_factory=list)
+    adjustments: list[str] = Field(
+        default_factory=list,
+        description="Suggested allocation adjustments from Claude",
+    )
+    reasoning: str = Field(default="", description="Full qualitative reasoning")
+    is_capital_preservation: bool = Field(
+        default=False,
+        description="True if all strategies were rejected and fallback was used",
+    )
+    timestamp: float = Field(default_factory=time.time)
+
+    model_config = {"use_enum_values": True}
