@@ -3,6 +3,7 @@ Pydantic data models for Atlas DeFi data layer.
 """
 from __future__ import annotations
 
+import time
 from enum import Enum
 from typing import Optional
 
@@ -52,3 +53,35 @@ class FetchResult(BaseModel):
     source: str = Field(default="live", description="'live' or 'mock'")
     fetched_at: float = Field(default=0.0, description="Unix timestamp of fetch")
     error: Optional[str] = Field(default=None)
+
+
+class MarketSentiment(str, Enum):
+    BULLISH = "bullish"
+    NEUTRAL = "neutral"
+    BEARISH = "bearish"
+    VOLATILE = "volatile"
+
+
+class RankedOpportunity(BaseModel):
+    """An opportunity with Claude's risk-adjusted ranking annotation."""
+
+    opportunity: OpportunityModel
+    rank: int = Field(..., ge=1, description="1 = best risk-adjusted return")
+    risk_adjusted_score: float = Field(
+        ..., description="Higher is better; apy discounted by volatility and size"
+    )
+    rationale: str = Field(default="", description="One-line analyst note")
+
+
+class MarketReport(BaseModel):
+    """Structured output from the Market Analyst Agent."""
+
+    top_opportunities: list[RankedOpportunity] = Field(default_factory=list)
+    market_sentiment: MarketSentiment = Field(default=MarketSentiment.NEUTRAL)
+    recommended_focus: str = Field(
+        default="", description="Short strategic recommendation from Claude"
+    )
+    data_source: str = Field(default="live", description="'live' or 'mock'")
+    timestamp: float = Field(default_factory=time.time)
+
+    model_config = {"use_enum_values": True}
