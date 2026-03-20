@@ -346,6 +346,24 @@ class MockWallet(BaseWallet):
         self._db.save_snapshot(snap)
         return snap
 
+    def pay_yield(self, to: str, amount_usd: float) -> TransactionRecord:
+        """
+        Pay harvested yield to a beneficiary address.
+        Records the intent as a YIELD_PAYMENT transaction. WDKWallet overrides
+        this to also call send_usdt() for a real on-chain transfer.
+        """
+        if amount_usd <= 0:
+            raise ValueError(f"Yield payment amount must be positive, got {amount_usd}")
+        tx = TransactionRecord(
+            tx_hash=_make_tx_hash(),
+            tx_type=TxType.YIELD_PAYMENT,
+            protocol="Yield Harvest",
+            from_token="USDT",
+            to_token="USDT",
+            amount_usd=round(amount_usd, 4),
+        )
+        return self._record(tx)
+
     def tx_history(self, limit: int = 50) -> list[TransactionRecord]:
         return self._tx_log[-limit:]
 
@@ -528,6 +546,21 @@ class WDKWallet(MockWallet):
                 })
             except Exception as exc:
                 logger.debug(f"[WALLET] WDK sign for withdraw skipped: {exc}")
+        return tx
+
+    def pay_yield(self, to: str, amount_usd: float) -> TransactionRecord:
+        tx = super().pay_yield(to, amount_usd)
+        if self._online:
+            try:
+                resp = self._post("/wallet/send-usdt", {"to": to, "amount": str(round(amount_usd, 6))})
+                if resp.get("success"):
+                    real_hash = resp["data"]["tx_hash"]
+                    logger.info(
+                        f"[WALLET] WDK yield payment → {to[:18]}…  "
+                        f"amount=${amount_usd:.2f}  real_hash={real_hash[:18]}…"
+                    )
+            except Exception as exc:
+                logger.debug(f"[WALLET] WDK yield payment skipped: {exc}")
         return tx
 
     def buy_xaut(self, amount_usd: float) -> TransactionRecord:

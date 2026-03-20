@@ -59,6 +59,14 @@ class Config:
         default_factory=lambda: float(os.getenv("MAX_VOLATILITY_THRESHOLD", "0.15"))
     )
 
+    # ── Yield payout ─────────────────────────────────────────────────────────
+    yield_payout_address: str = field(
+        default_factory=lambda: os.getenv("YIELD_PAYOUT_ADDRESS", "")
+    )
+    yield_payout_threshold_usd: float = field(
+        default_factory=lambda: float(os.getenv("YIELD_PAYOUT_THRESHOLD_USD", "50.0"))
+    )
+
     # ── Dashboard ────────────────────────────────────────────────────────────
     dashboard_host: str = field(
         default_factory=lambda: os.getenv("DASHBOARD_HOST", "0.0.0.0")

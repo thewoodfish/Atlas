@@ -307,6 +307,49 @@ class Orchestrator:
         })
         return exec_report
 
+    # ── Yield payout ───────────────────────────────────────────────────────────
+
+    async def _step_pay_yield(self, projected_yield_usd: float) -> None:
+        """
+        If projected yield exceeds the configured threshold, autonomously pay
+        it out to the beneficiary address via WDK send_usdt.
+        This demonstrates agent-driven conditional payment logic.
+        """
+        payout_address = config.yield_payout_address
+        threshold = config.yield_payout_threshold_usd
+
+        if not payout_address:
+            return  # no beneficiary configured
+
+        if projected_yield_usd < threshold:
+            logger.debug(
+                f"[ORCHESTRATOR] Projected yield ${projected_yield_usd:.2f} "
+                f"below payout threshold ${threshold:.2f} — no payment"
+            )
+            return
+
+        logger.info(
+            f"[ORCHESTRATOR] Yield threshold crossed: "
+            f"${projected_yield_usd:.2f} ≥ ${threshold:.2f} — "
+            f"paying out to {payout_address}"
+        )
+        try:
+            tx = self._wallet.pay_yield(payout_address, round(projected_yield_usd, 2))
+            self._emit_event("yield_payment", {
+                "amount_usd":  round(projected_yield_usd, 2),
+                "to":          payout_address,
+                "tx_hash":     tx.tx_hash,
+                "trigger":     "threshold_crossed",
+                "threshold":   threshold,
+            })
+            logger.info(
+                f"[ORCHESTRATOR] Yield payment sent — "
+                f"${projected_yield_usd:.2f} USDT → {payout_address}  "
+                f"hash={tx.tx_hash[:18]}…"
+            )
+        except Exception as exc:
+            logger.error(f"[ORCHESTRATOR] Yield payment failed: {exc}")
+
     # ── Demo scenario ──────────────────────────────────────────────────────────
 
     async def _inject_demo_shock(self) -> None:
@@ -374,7 +417,10 @@ class Orchestrator:
                 portfolio_value = snap.total_value_usd if snap else portfolio_value
                 final_action = f"executed:{exec_report.trigger}"
 
-            # 6. Monitor state
+                # 6. Autonomous yield payout (agent-driven conditional payment)
+                await self._step_pay_yield(simulation.projected_7d_yield)
+
+            # 8. Monitor state
             self._set_state(SystemState.MONITORING)
 
             # Demo: inject shock on cycle 2

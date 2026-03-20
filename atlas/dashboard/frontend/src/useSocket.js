@@ -15,7 +15,7 @@ export function useSocket(maxEvents = 100) {
 
     const EVENTS = [
       'state_change', 'market_report', 'strategy_bundle', 'risk_assessment',
-      'simulation_result', 'execution_report', 'demo_shock', 'error',
+      'simulation_result', 'execution_report', 'yield_payment', 'demo_shock', 'error',
     ]
     EVENTS.forEach(type => {
       socket.on(type, payload => {

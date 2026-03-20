@@ -187,10 +187,11 @@ class SimulationResult(BaseModel):
 # ── Wallet models ─────────────────────────────────────────────────────────────
 
 class TxType(str, Enum):
-    DEPOSIT  = "deposit"
-    WITHDRAW = "withdraw"
-    SWAP     = "swap"
-    REBALANCE = "rebalance"
+    DEPOSIT       = "deposit"
+    WITHDRAW      = "withdraw"
+    SWAP          = "swap"
+    REBALANCE     = "rebalance"
+    YIELD_PAYMENT = "yield_payment"
 
 
 class TransactionRecord(BaseModel):
