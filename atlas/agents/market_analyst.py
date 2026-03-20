@@ -32,8 +32,9 @@ from config import config
 # ── Prompts ──────────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = (
-    "You are a DeFi market analyst. Analyze yield opportunities and rank them "
-    "by risk-adjusted return. Be concise, data-driven, and highlight any concerns."
+    "You are a DeFi market analyst. You MUST rank ALL provided yield opportunities "
+    "by risk-adjusted return — do not omit any. Assign each a rank (1 = best) and a "
+    "risk_adjusted_score (0–100). Be concise and data-driven."
 )
 
 _ANALYSIS_TOOL = {
@@ -47,7 +48,7 @@ _ANALYSIS_TOOL = {
         "properties": {
             "ranked_opportunities": {
                 "type": "array",
-                "description": "Opportunities sorted best → worst by risk-adjusted score.",
+                "description": "ALL opportunities ranked best → worst. Must include every pool provided — never return an empty list.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -86,15 +87,17 @@ def _build_user_message(fetch: FetchResult) -> str:
         f"Data source: {fetch.source}",
         f"Pools analysed: {len(fetch.opportunities)}",
         "",
-        f"{'#':<3} {'Protocol':<20} {'Symbol':<24} {'APY':>6} {'TVL ($M)':>10} {'Vol7d':>7} {'Type':<14} {'Chain'}",
-        "-" * 100,
+        f"{'#':<3} {'pool_id':<45} {'Protocol':<20} {'Symbol':<20} {'APY':>6} {'TVL ($M)':>10} {'Vol7d':>7} {'Type':<14} {'Chain'}",
+        "-" * 140,
     ]
     for i, opp in enumerate(fetch.opportunities, 1):
         lines.append(
-            f"{i:<3} {opp.protocol:<20} {opp.symbol:<24} "
+            f"{i:<3} {opp.pool_id:<45} {opp.protocol:<20} {opp.symbol:<20} "
             f"{opp.apy:>5.1f}% {opp.tvl_usd / 1e6:>9.1f}M "
             f"{opp.volatility_7d * 100:>6.2f}% {opp.pool_type:<14} {opp.chain}"
         )
+    lines.append("")
+    lines.append(f"Rank ALL {len(fetch.opportunities)} pools above. Use the exact pool_id strings from this table.")
     return "\n".join(lines)
 
 
@@ -182,7 +185,7 @@ class MarketAnalystAgent:
 
         response = await self._anthropic.messages.create(
             model=config.claude_model,
-            max_tokens=1024,
+            max_tokens=2048,
             system=_SYSTEM_PROMPT,
             tools=[_ANALYSIS_TOOL],
             tool_choice={"type": "tool", "name": "submit_market_report"},

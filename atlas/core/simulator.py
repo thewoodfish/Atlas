@@ -36,15 +36,16 @@ from atlas.data.models import (
 )
 from config import config
 
-# ── Gas model constants (Ethereum mainnet estimates, USD) ─────────────────────
-# Approximate gas costs at ~30 gwei, ETH ~$3 000
+# ── Gas model constants (L2/multi-chain estimates, USD) ──────────────────────
+# Approximate gas costs at ~0.05 gwei on Arbitrum/Base/Polygon, ETH ~$3 000
 
 _GAS_COST_PER_TX: dict[str, float] = {
-    "lending":        12.0,   # deposit/withdraw to Aave/Compound
-    "stable_swap":    18.0,   # Curve add/remove liquidity
-    "yield_vault":    22.0,   # Yearn vault deposit/withdrawal
-    "liquidity_pool": 25.0,   # Uniswap/Sushi add liquidity
-    "unknown":        15.0,
+    "lending":        1.50,   # deposit/withdraw to Aave/Compound on L2
+    "stable_swap":    2.00,   # Curve add/remove liquidity on L2
+    "yield_vault":    2.50,   # Yearn vault deposit/withdrawal on L2
+    "liquidity_pool": 3.00,   # Uniswap/Sushi add liquidity on L2
+    "xaut_hedge":     1.50,   # USDT→XAUT swap on L2
+    "unknown":        2.00,
 }
 _TXS_PER_PROTOCOL = 2          # one deposit + one approve (worst-case)
 _REBALANCE_TXS    = 1          # future rebalance per cycle
@@ -74,6 +75,9 @@ def _estimate_gas(
     """Estimate total gas cost in USD for entering the strategy."""
     total = 0.0
     for protocol, pct in strategy.allocations.items():
+        if protocol == "XAUT":
+            total += _GAS_COST_PER_TX["xaut_hedge"] * _TXS_PER_PROTOCOL
+            continue
         ptype = pool_types.get(protocol, "unknown")
         per_tx = _GAS_COST_PER_TX.get(ptype, 15.0)
         total += per_tx * _TXS_PER_PROTOCOL
@@ -139,9 +143,10 @@ def _run_projection(
     """
     apy_by_protocol = {o.protocol: o.apy for o in opportunities}
     # Weighted blended daily rate across all allocations
+    # XAUT is a store-of-value hedge with 0% yield
     blended_daily = sum(
         (strategy.allocations.get(proto, 0.0) / 100.0)
-        * _daily_rate(apy_by_protocol.get(proto, strategy.expected_yield))
+        * _daily_rate(0.0 if proto == "XAUT" else apy_by_protocol.get(proto, strategy.expected_yield))
         for proto in strategy.allocations
     )
 

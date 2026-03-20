@@ -157,7 +157,10 @@ def _parse_pool(raw: dict[str, Any]) -> OpportunityModel | None:
             return None
 
         project: str = raw.get("project", "Unknown")
-        pool_id: str = raw.get("pool", project + "-" + symbol)
+        # Use a readable id (protocol-symbol) so LLMs can identify pools
+        raw_pool_id: str = raw.get("pool", "")
+        safe_symbol = symbol.replace("/", "-").replace(" ", "_")[:20]
+        pool_id: str = f"{project}-{safe_symbol}" if raw_pool_id else project + "-" + safe_symbol
         apy: float = raw.get("apy") or 0.0
         tvl: float = raw.get("tvlUsd") or 0.0
         vol_7d: float = (raw.get("apyPct7D") or 0.0) / 100.0  # convert % → fraction
@@ -260,8 +263,15 @@ class DeFiClient:
                 if opp is not None:
                     opportunities.append(opp)
 
-            # Sort by APY descending for convenience
-            opportunities.sort(key=lambda o: o.apy, reverse=True)
+            # Filter for quality: minimum TVL $10M, positive APY, cap extreme APY
+            opportunities = [
+                o for o in opportunities
+                if o.tvl_usd >= 10_000_000 and 0.1 <= o.apy <= 50.0
+            ]
+
+            # Sort by TVL descending — largest pools are most established/trustworthy
+            opportunities.sort(key=lambda o: o.tvl_usd, reverse=True)
+            opportunities = opportunities[:15]
 
             logger.info(
                 f"Fetched {len(opportunities)} stablecoin opportunities from DeFiLlama"

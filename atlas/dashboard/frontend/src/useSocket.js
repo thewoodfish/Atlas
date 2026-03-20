@@ -7,7 +7,7 @@ export function useSocket(maxEvents = 100) {
   const socketRef = useRef(null)
 
   useEffect(() => {
-    const socket = io({ path: '/ws', namespace: '/ws/feed', transports: ['websocket'] })
+    const socket = io('/ws/feed', { path: '/ws', transports: ['websocket'] })
     socketRef.current = socket
 
     socket.on('connect',    () => setConnected(true))

@@ -37,7 +37,11 @@ _SYSTEM_PROMPT = (
     "allocation strategies. Each allocation must sum to exactly 100%. "
     "Conservative strategies prefer lending protocols with max 70% in any single protocol. "
     "Balanced strategies mix lending and liquidity pools. "
-    "Aggressive strategies may include experimental vaults chasing the highest yield."
+    "Aggressive strategies may include experimental vaults chasing the highest yield. "
+    "When market sentiment is 'bearish' or 'volatile', include 'XAUT' (Tether Gold) "
+    "as a safe-haven hedge in the conservative strategy (10-20% allocation). "
+    "XAUT has 0% yield but preserves value against DeFi volatility. "
+    "Use the exact key 'XAUT' in the allocations dict when including gold."
 )
 
 def _strategy_schema(description: str) -> dict[str, Any]:
@@ -125,11 +129,18 @@ def _build_user_message(report: MarketReport) -> str:
         if ro.rationale:
             lines.append(f"      ↳ {ro.rationale}")
 
-    lines += [
-        "",
+    lines.append("")
+    if report.market_sentiment in ("bearish", "volatile"):
+        lines.append(
+            "⚠️  Sentiment is bearish/volatile. Include 'XAUT' (Tether Gold, 0% yield) "
+            "as a 10-20% safe-haven hedge in the conservative strategy. "
+            "Use 'XAUT' as the exact key in the allocations dict."
+        )
+    lines.append(
         "Generate three strategies (conservative / balanced / aggressive) using ONLY "
-        "the protocols listed above. Allocations must sum to exactly 100.",
-    ]
+        "the protocols listed above (plus 'XAUT' when appropriate). "
+        "Allocations must sum to exactly 100."
+    )
     return "\n".join(lines)
 
 

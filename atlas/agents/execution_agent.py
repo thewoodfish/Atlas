@@ -155,6 +155,9 @@ class ExecutionAgent:
         # Include idle USDT in current as "IDLE"
         if snap_before.idle_usdt > 0.01:
             current_usd["__idle__"] = snap_before.idle_usdt
+        # Include existing XAUT holding so it participates in rebalance math
+        if snap_before.xaut_usd > 0.01:
+            current_usd["XAUT"] = snap_before.xaut_usd
 
         withdrawals, deposits = _rebalance_steps(current_usd, target_pct, total)
 
@@ -168,7 +171,10 @@ class ExecutionAgent:
             if protocol == "__idle__":
                 continue
             try:
-                tx = self._wallet.withdraw(protocol, amount)
+                if protocol == "XAUT":
+                    tx = self._wallet.sell_xaut(amount)
+                else:
+                    tx = self._wallet.withdraw(protocol, amount)
                 txs.append(tx)
                 logger.info(
                     f"[EXECUTION AGENT] Withdrew ${amount:,.2f} from {protocol}"
@@ -181,7 +187,20 @@ class ExecutionAgent:
 
         # Step 2: Deposits
         for protocol, amount in deposits:
-            # Check TVL guard before depositing
+            if protocol == "XAUT":
+                # XAUT is a gold hedge — no TVL check needed
+                try:
+                    tx = self._wallet.buy_xaut(amount)
+                    txs.append(tx)
+                    logger.info(
+                        f"[EXECUTION AGENT] Bought XAUT hedge ${amount:,.2f}"
+                    )
+                except Exception as exc:
+                    logger.warning(f"[EXECUTION AGENT] XAUT buy failed: {exc}")
+                    skipped.append(protocol)
+                continue
+
+            # Check TVL guard before depositing into DeFi protocol
             tvl = self._tvl_for(protocol)
             if tvl < EMERGENCY_TVL_USD:
                 logger.warning(
@@ -251,6 +270,9 @@ class ExecutionAgent:
         total = snap.total_value_usd
 
         for protocol, deployed_usd in snap.allocations.items():
+            if protocol == "XAUT":
+                continue  # Gold hedge — no TVL or yield checks
+
             # Emergency TVL check
             tvl = self._tvl_for(protocol)
             if tvl < EMERGENCY_TVL_USD:
@@ -349,7 +371,10 @@ class ExecutionAgent:
             for protocol, amount in list(snap.allocations.items()):
                 if amount > 0.01:
                     try:
-                        tx = self._wallet.withdraw(protocol, amount)
+                        if protocol == "XAUT":
+                            tx = self._wallet.sell_xaut(amount)
+                        else:
+                            tx = self._wallet.withdraw(protocol, amount)
                         txs.append(tx)
                     except Exception as exc:
                         logger.error(

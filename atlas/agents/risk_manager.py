@@ -102,8 +102,10 @@ def _hard_check(
     flags: list[RiskFlag] = []
     failed = False
 
-    # 1. Concentration: max 40% per protocol
+    # 1. Concentration: max 40% per protocol (XAUT exempt — it's a hedge, not a DeFi pool)
     for protocol, pct in strategy.allocations.items():
+        if protocol == "XAUT":
+            continue
         if pct > MAX_SINGLE_PROTOCOL_PCT:
             logger.warning(
                 f"[RISK MANAGER] FAIL concentration: {protocol} = {pct:.1f}% "
@@ -128,6 +130,8 @@ def _hard_check(
             tvl_by_protocol[opp.protocol] = opp.tvl_usd
 
     for protocol in strategy.allocations:
+        if protocol == "XAUT":
+            continue  # Tether Gold is not a DeFi pool — no TVL check
         tvl = tvl_by_protocol.get(protocol, float("inf"))
         if tvl < MIN_TVL_USD:
             logger.warning(

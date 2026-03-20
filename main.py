@@ -64,15 +64,17 @@ async def _preflight_check() -> None:
     except anthropic.AuthenticationError:
         logger.error("Preflight FAILED: Invalid ANTHROPIC_API_KEY.")
         sys.exit(1)
+    except anthropic.RateLimitError:
+        logger.warning("Preflight: rate limit hit — API key valid, continuing.")
     except Exception as exc:
         logger.error(f"Preflight FAILED: {exc}")
         sys.exit(1)
 
 
-async def run(demo: bool = False, with_dashboard: bool = True) -> None:
+async def run(demo: bool = False, with_dashboard: bool = True, max_cycles: int | None = None) -> None:
     from atlas.core.orchestrator import Orchestrator
 
-    orchestrator = Orchestrator(demo=demo)
+    orchestrator = Orchestrator(demo=demo, max_cycles=max_cycles)
 
     if with_dashboard:
         import threading
@@ -106,6 +108,9 @@ def main() -> None:
     parser.add_argument(
         "--demo", action="store_true", help="Run the demo scenario"
     )
+    parser.add_argument(
+        "--max-cycles", type=int, default=None, help="Stop after N cycles (default: run forever)"
+    )
     args = parser.parse_args()
 
     _configure_logging()
@@ -119,7 +124,7 @@ def main() -> None:
 
     async def _main() -> None:
         await _preflight_check()
-        await run(demo=args.demo, with_dashboard=not args.no_dashboard)
+        await run(demo=args.demo, with_dashboard=not args.no_dashboard, max_cycles=args.max_cycles)
 
     try:
         asyncio.run(_main())

@@ -216,6 +216,7 @@ class PortfolioSnapshot(BaseModel):
         description="protocol -> USD amount currently deployed"
     )
     idle_usdt: float = Field(description="Undeployed USDT balance")
+    xaut_usd: float  = Field(default=0.0, description="XAUT (Tether Gold) holding in USD")
     pnl_usd: float   = Field(description="Profit/loss vs initial capital in USD")
     pnl_pct: float   = Field(description="Profit/loss as a percentage")
     timestamp: float = Field(default_factory=time.time)

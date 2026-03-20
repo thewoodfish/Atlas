@@ -173,6 +173,7 @@ class MockWallet(BaseWallet):
         self._initial_capital = initial_capital or config.initial_portfolio_usdt
         self._idle_usdt: float = self._initial_capital
         self._deployed: dict[str, float] = {}
+        self._xaut_usd: float = 0.0
         self._tx_log: list[TransactionRecord] = []
         self._db = _WalletDB(db_url or config.database_url)
         self.address: str = address or config.wallet_address
@@ -289,9 +290,46 @@ class MockWallet(BaseWallet):
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
+    def buy_xaut(self, amount_usd: float) -> TransactionRecord:
+        """Convert USDT to XAUT (Tether Gold) holding."""
+        if amount_usd <= 0:
+            raise ValueError(f"Amount must be positive, got {amount_usd}")
+        if amount_usd > self._idle_usdt:
+            raise ValueError(
+                f"Insufficient idle USDT: have ${self._idle_usdt:.2f}, need ${amount_usd:.2f}"
+            )
+        self._idle_usdt -= amount_usd
+        self._xaut_usd += amount_usd
+        tx = TransactionRecord(
+            tx_hash=_make_tx_hash(),
+            tx_type=TxType.SWAP,
+            protocol="Tether Gold",
+            from_token="USDT",
+            to_token="XAUT",
+            amount_usd=round(amount_usd, 4),
+        )
+        return self._record(tx)
+
+    def sell_xaut(self, amount_usd: float) -> TransactionRecord:
+        """Convert XAUT back to USDT."""
+        if amount_usd <= 0:
+            raise ValueError(f"Amount must be positive, got {amount_usd}")
+        actual = min(amount_usd, self._xaut_usd)
+        self._xaut_usd -= actual
+        self._idle_usdt += actual
+        tx = TransactionRecord(
+            tx_hash=_make_tx_hash(),
+            tx_type=TxType.SWAP,
+            protocol="Tether Gold",
+            from_token="XAUT",
+            to_token="USDT",
+            amount_usd=round(actual, 4),
+        )
+        return self._record(tx)
+
     def get_balance(self) -> float:
-        """Total wallet value (idle + all deployed)."""
-        return round(self._idle_usdt + sum(self._deployed.values()), 4)
+        """Total wallet value (idle + all deployed + XAUT)."""
+        return round(self._idle_usdt + sum(self._deployed.values()) + self._xaut_usd, 4)
 
     def get_portfolio_snapshot(self) -> PortfolioSnapshot:
         total = self.get_balance()
@@ -301,6 +339,7 @@ class MockWallet(BaseWallet):
             total_value_usd=round(total, 4),
             allocations={p: round(v, 4) for p, v in self._deployed.items()},
             idle_usdt=round(self._idle_usdt, 4),
+            xaut_usd=round(self._xaut_usd, 4),
             pnl_usd=round(pnl, 4),
             pnl_pct=round(pnl_pct, 4),
         )
@@ -328,24 +367,33 @@ class MockWallet(BaseWallet):
             f"[WALLET] Applying strategy allocations  total=${total_capital:,.2f}"
         )
 
-        # Withdraw all existing positions
+        # Withdraw all existing DeFi positions
         txs: list[TransactionRecord] = []
         for protocol, amount in list(self._deployed.items()):
             if amount > 0:
                 txs.append(self.withdraw(protocol, amount))
 
-        # Deposit per allocation
+        # Sell any existing XAUT back to USDT before redeploying
+        if self._xaut_usd > 0:
+            txs.append(self.sell_xaut(self._xaut_usd))
+
+        # Deploy per allocation (XAUT handled separately as a hedge)
         for protocol, pct in allocations.items():
             if pct <= 0:
                 continue
             amount = round(total_capital * pct / 100, 4)
-            if amount > 0:
+            if amount <= 0:
+                continue
+            if protocol == "XAUT":
+                txs.append(self.buy_xaut(amount))
+            else:
                 txs.append(self.deposit(protocol, amount))
 
         snapshot = self.get_portfolio_snapshot()
         logger.info(
             f"[WALLET] Strategy applied — "
-            f"deployed=${total_capital - snapshot.idle_usdt:,.2f}  "
+            f"deployed=${total_capital - snapshot.idle_usdt - snapshot.xaut_usd:,.2f}  "
+            f"xaut=${snapshot.xaut_usd:,.2f}  "
             f"idle=${snapshot.idle_usdt:,.2f}"
         )
         return txs
@@ -447,6 +495,20 @@ class WDKWallet(MockWallet):
                 })
             except Exception as exc:
                 logger.debug(f"[WALLET] WDK sign for withdraw skipped: {exc}")
+        return tx
+
+    def buy_xaut(self, amount_usd: float) -> TransactionRecord:
+        tx = super().buy_xaut(amount_usd)
+        if self._online:
+            try:
+                self._post("/wallet/sign", {
+                    "message": (
+                        f"Atlas XAUT hedge: ${amount_usd:.4f} USDT → XAUT "
+                        f"hash={tx.tx_hash}"
+                    )
+                })
+            except Exception as exc:
+                logger.debug(f"[WALLET] WDK sign for XAUT buy skipped: {exc}")
         return tx
 
     def send_usdt(self, to: str, amount: float) -> str:

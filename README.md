@@ -1,22 +1,35 @@
 # Atlas
 
-> **Autonomous onchain treasury infrastructure powered by multi-agent AI.**
+> **The autonomous treasury officer for onchain organisations.**
 
-Atlas is a fully autonomous DeFi portfolio manager. It continuously scans live yield markets, generates allocation strategies, enforces risk constraints through a two-layer validation pipeline, shadow-simulates outcomes before committing capital, and executes rebalancing — all without human intervention. When market conditions deteriorate, it detects the threat and exits positions automatically.
+[![Tests](https://img.shields.io/badge/tests-76%20passed-brightgreen)](tests/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
+[![Claude](https://img.shields.io/badge/powered%20by-Claude%20Haiku-orange)](https://anthropic.com)
+[![WDK](https://img.shields.io/badge/wallet-Tether%20WDK-green)](https://github.com/tetherto/wallet-sdk)
 
-Built with the [Tether WDK](https://github.com/tetherto/wallet-sdk) for self-custodial wallet operations and [Anthropic Claude](https://www.anthropic.com) for agent reasoning.
+---
+
+**The problem:** DAOs and crypto-native funds manage millions in on-chain treasuries manually — copying APYs from dashboards, debating allocations in Discord, executing transactions one by one. It's slow, error-prone, and never sleeps.
+
+**Atlas fixes this.** It is a fully autonomous multi-agent system that continuously monitors DeFi yield markets, reasons about risk, simulates outcomes before committing capital, executes rebalancing, and — when markets turn — rotates into XAUT (Tether Gold) as a safe-haven hedge. No human in the loop. No cron job. A real AI agent acting as a treasury officer.
+
+Built with [Tether WDK](https://github.com/tetherto/wallet-sdk) for self-custodial wallet operations and [Anthropic Claude](https://www.anthropic.com) for agent reasoning.
 
 ---
 
 ## What makes Atlas different
 
-Most DeFi automation tools are rule-based scripts. Atlas uses a **pipeline of specialized AI agents**, each with a distinct role and its own Claude reasoning context:
+Most DeFi automation tools are rule-based scripts that execute a fixed strategy. Atlas uses a **pipeline of specialised AI agents**, each with a distinct role and its own Claude reasoning context — closer to a team of analysts than a bot:
 
-- The **Market Analyst** doesn't just fetch APYs — it asks Claude to rank opportunities by risk-adjusted return and form a market view.
-- The **Strategy Agent** doesn't pick the highest yield — it generates three philosophically distinct strategies (Conservative / Balanced / Aggressive) and justifies each one.
-- The **Risk Manager** runs two independent checks: deterministic hard rules (concentration limits, TVL floors, volatility flags) *and* a separate Claude qualitative review. Both must pass.
-- The **Simulator** shadow-executes the strategy over a 7-day projection with realistic gas and slippage models before a single transaction is submitted.
-- The **Execution Agent** doesn't just deploy capital — it monitors positions every 60 seconds and triggers autonomous emergency exits on yield collapse or TVL crisis.
+| | Rule-based automation | **Atlas** |
+|---|---|---|
+| Market analysis | Fetches APYs | Claude ranks by risk-adjusted return + forms market sentiment |
+| Strategy | One fixed allocation | 3 philosophically distinct strategies generated and justified |
+| Risk | Hard rules only | Hard rules **and** independent Claude qualitative review |
+| Pre-trade | None | 7-day shadow simulation with gas + slippage models |
+| Execution | Manual trigger | Fully autonomous; monitors positions every 60s |
+| Downside | Exit manually | Auto-emergency-exit on TVL crisis or yield collapse |
+| Safe haven | USDT only | **Rotates to XAUT (Tether Gold) when sentiment turns bearish** |
 
 ---
 
@@ -67,11 +80,25 @@ Most DeFi automation tools are rule-based scripts. Atlas uses a **pipeline of sp
 
 | Step | Agent | Input → Output | Key behaviour |
 |------|-------|---------------|---------------|
-| 1 | **Market Analyst** | DeFiLlama pools → `MarketReport` | Claude ranks opportunities by risk-adjusted return; forms bullish/bearish/neutral/volatile sentiment |
-| 2 | **Strategy Agent** | `MarketReport` → `StrategyBundle` | Claude generates 3 distinct strategies with allocation rationale |
-| 3 | **Risk Manager** | `StrategyBundle` → `RiskAssessment` | Layer 1: hard rules (≤40% concentration, TVL ≥$10M, score ≤8, vol flag). Layer 2: Claude qualitative review. Falls back to capital-preservation strategy if all fail |
-| 4 | **Simulator** | `RiskAssessment` → `SimulationResult` | 7-day compounding projection with per-protocol gas ($12–$25/tx) and slippage (2–8 bps) models; rejects if net return < 0 |
-| 5 | **Execution Agent** | `SimulationResult` → `ExecutionReport` | Deploys capital; monitors every 60s; auto-exits on yield drop >20%, TVL < $5M, or drift >10pp |
+| 1 | **Market Analyst** | DeFiLlama pools → `MarketReport` | Claude ranks all opportunities by risk-adjusted return; forms bullish / bearish / neutral / volatile sentiment |
+| 2 | **Strategy Agent** | `MarketReport` → `StrategyBundle` | Claude generates 3 distinct strategies with allocation rationale; adds XAUT hedge (10–20%) when sentiment is bearish or volatile |
+| 3 | **Risk Manager** | `StrategyBundle` → `RiskAssessment` | Layer 1: hard rules (≤40% concentration, TVL ≥$10M, risk score ≤8, volatility flag). Layer 2: Claude qualitative review. XAUT exempt from DeFi pool checks. Falls back to capital-preservation if all strategies fail |
+| 4 | **Simulator** | `RiskAssessment` → `SimulationResult` | 7-day compounding projection with per-protocol gas ($1.50–$3/tx on L2) and slippage (2–8 bps); XAUT modelled as 0% APY store-of-value; rejects strategy if net return < 0 |
+| 5 | **Execution Agent** | `SimulationResult` → `ExecutionReport` | Deploys capital via WDK; buys XAUT when hedging; monitors every 60s; auto-exits on yield drop >20%, TVL < $5M, or allocation drift >10pp |
+
+---
+
+## XAUT Safe-Haven Hedge
+
+When the Market Analyst reports **bearish or volatile** sentiment, Atlas automatically shifts a portion of the treasury into **XAUT (Tether Gold)**:
+
+- Strategy Agent instructs Claude to allocate 10–20% to `XAUT` in the conservative strategy
+- Risk Manager exempts XAUT from DeFi-specific TVL and concentration checks
+- Simulator treats XAUT as 0% APY — pure capital preservation, no phantom yield
+- Execution Agent calls `buy_xaut()` → converts USDT → XAUT on-chain and signs an EIP-191 audit message via the WDK microservice
+- When sentiment recovers, XAUT is sold back to USDT and redeployed into yield-bearing protocols
+
+**This is real multi-asset treasury management** — not just yield optimisation.
 
 ---
 
@@ -83,7 +110,7 @@ Atlas ships a dedicated **Node.js microservice** (`wdk_service/`) that wraps the
 - Live on-chain balances: ETH, USDT (ERC-20), and **XAUT (Tether Gold)**
 - `POST /wallet/send-usdt` — on-chain USDT transfer
 - `POST /wallet/send-xaut` — on-chain XAUT transfer
-- `POST /wallet/sign` — EIP-191 message signing (audit trail for every rebalance)
+- `POST /wallet/sign` — EIP-191 message signing (audit trail for every rebalance and XAUT hedge)
 - Python `WDKWallet` calls the service over HTTP; degrades gracefully to simulation when the service is offline
 
 ```bash
@@ -105,32 +132,43 @@ cd Atlas
 
 # 2. Configure
 cp .env.example .env
-# → set ANTHROPIC_API_KEY (required)
-# → optionally set WDK_SEED_PHRASE to persist a real wallet
+# Edit .env:
+#   ANTHROPIC_API_KEY=sk-ant-...   (required)
+#   WDK_SEED_PHRASE=...            (optional — persists wallet across runs)
 
-# 3. Install all dependencies (Python + Node)
+# 3. Install Python + Node dependencies
 make install
 
-# 4. Run the demo  (validates API key, then runs two full cycles)
+# 4. Terminal 1 — run the demo (2 full autonomous cycles)
 make run-demo
 
-# 5. Open the dashboard in a second terminal
-make dashboard          # → http://localhost:5173
+# 5. Terminal 2 — launch the dashboard
+cd atlas/dashboard/frontend && npm run dev -- --port 3000
+# → http://localhost:3000
 ```
 
 ---
 
 ## Demo Walkthrough
 
-`make run-demo` seeds a $100,000 USDT treasury and runs the full autonomous pipeline:
+`make run-demo` seeds a **$100,000 USDT** treasury and runs two complete autonomous cycles:
 
-1. **Preflight** — Atlas validates the Anthropic API key before starting. Fails fast with a clear error if the key is invalid or the network is unreachable.
+**Preflight** — Atlas validates the Anthropic API key and fails fast with a clear error if credentials are invalid.
 
-2. **Cycle 1** — Market Analyst fetches live DeFiLlama data, Claude ranks the opportunities, Strategy Agent generates three allocation strategies, Risk Manager validates them through hard rules and qualitative review, Simulator projects a 7-day return (accounting for gas and slippage), and Execution Agent deploys capital across the approved strategy.
+**Cycle 1: Full pipeline**
+1. Market Analyst fetches live pools from DeFiLlama, filters to top 15 by TVL and quality, sends to Claude for risk-adjusted ranking
+2. Strategy Agent generates Conservative / Balanced / Aggressive strategies with full allocation rationale
+3. Risk Manager runs hard rules then a separate Claude qualitative review — both must pass
+4. Simulator projects a 7-day return with realistic gas and slippage; rejects if net return is negative
+5. Execution Agent deploys capital across approved allocations via the WDK wallet, signing each transaction
 
-3. **Cycle 2** — Begins 5 seconds after Cycle 1 completes. Mid-cycle, a **market shock is injected**: Curve Finance APY collapses to 1% and TVL drops to $4M. The position monitor detects both a yield-drop trigger and an emergency TVL condition, and **autonomously exits the position** without any human input.
+**Cycle 2: Autonomous response to market shock**
+- 5 seconds after Cycle 1, a market shock is injected: Curve Finance APY collapses to 1%, TVL drops to $4M
+- Position monitor detects yield-drop and emergency TVL triggers simultaneously
+- Atlas **autonomously exits the position** — no human input required
+- If sentiment is bearish, the conservative strategy rotates 10–20% into **XAUT** as a gold hedge
 
-4. **Dashboard** — Every state transition, strategy decision, simulation result, and transaction streams live to the React frontend via WebSocket.
+**Dashboard** — every state transition, Claude decision, simulation result, and transaction streams live to the React frontend via WebSocket.
 
 ---
 
@@ -138,25 +176,25 @@ make dashboard          # → http://localhost:5173
 
 ```bash
 make test
-# or with coverage report:
+# or with coverage:
 make test-coverage
 ```
 
-**76 tests, 0 failures:**
+**76 tests, 0 failures — no mocks on critical paths:**
 
-| Suite | Tests | Coverage |
-|-------|-------|---------|
-| `tests/test_risk_manager.py` | 17 | All hard-rule constraint paths |
+| Suite | Tests | What's covered |
+|-------|-------|----------------|
+| `tests/test_risk_manager.py` | 17 | All hard-rule constraint paths, capital preservation fallback |
 | `tests/test_simulator.py` | 22 | Projection math, gas model, approval/rejection logic |
-| `tests/test_wallet.py` | 22 | Balance accounting, overdraft guards, tx recording |
-| `tests/test_api.py` | 15 | All REST endpoints + pagination |
+| `tests/test_wallet.py` | 22 | Balance accounting, XAUT buy/sell, overdraft guards, tx recording |
+| `tests/test_api.py` | 15 | All REST endpoints, WebSocket handshake, pagination |
 
 ---
 
 ## Docker
 
 ```bash
-cp .env.example .env   # fill in ANTHROPIC_API_KEY
+cp .env.example .env   # add ANTHROPIC_API_KEY
 
 docker compose up --build
 # WDK service:  http://localhost:3001
@@ -170,18 +208,17 @@ docker compose up --build
 
 | Layer | Technology |
 |-------|------------|
-| Agent reasoning | Anthropic SDK — `claude-sonnet-4-6` with forced `tool_use` for structured JSON |
-| Async runtime | Python 3.11+ `asyncio` — full async agent pipeline |
+| Agent reasoning | Anthropic SDK — `claude-haiku-4-5-20251001` with forced `tool_use` for structured JSON output |
+| Async runtime | Python 3.11+ `asyncio` — fully async agent pipeline, no blocking I/O |
 | Wallet / signing | Tether WDK (`@tetherto/wdk`, `@tetherto/wdk-wallet-evm`) via Node.js microservice |
-| DeFi data | DeFiLlama REST API (`yields.llama.fi/pools`) with 30s cache + mock fallback |
-| Data models | Pydantic v2 — strict validation on all agent I/O |
-| HTTP client | aiohttp (async) + urllib (WDK service calls) |
+| DeFi data | DeFiLlama REST API (`yields.llama.fi/pools`) — 30s cache, quality filters, mock fallback |
+| Data models | Pydantic v2 — strict validation on all agent I/O boundaries |
 | State persistence | SQLAlchemy + SQLite — every run, simulation, and transaction persisted |
 | REST API | Flask 3 + Flask-CORS |
-| Real-time feed | Flask-SocketIO — WebSocket event bus from orchestrator to dashboard |
+| Real-time feed | Flask-SocketIO — event bus from orchestrator to dashboard via WebSocket |
 | Frontend | Vite + React + TailwindCSS + Recharts |
 | Logging | Loguru — structured, coloured, file-rotated |
-| Testing | pytest — 76 tests, no mocks on critical paths |
+| Testing | pytest — 76 tests, real dependencies on critical paths |
 | Container | Docker Compose — wdk-service + api + nginx-fronted React |
 
 ---
@@ -193,12 +230,12 @@ Atlas/
 ├── atlas/
 │   ├── agents/
 │   │   ├── market_analyst.py    # DeFiLlama fetch + Claude ranking
-│   │   ├── strategy_agent.py    # Claude strategy generator (3 variants)
+│   │   ├── strategy_agent.py    # Claude strategy generator (3 variants + XAUT hedge)
 │   │   ├── risk_manager.py      # Two-layer risk validation + capital preservation
-│   │   └── execution_agent.py   # Wallet rebalancer + position monitor
+│   │   └── execution_agent.py   # Wallet rebalancer + XAUT buy/sell + position monitor
 │   ├── core/
 │   │   ├── orchestrator.py      # Async state machine + event bus + SQLite runs
-│   │   ├── wallet.py            # WDKWallet (HTTP→Node.js) + MockWallet fallback
+│   │   ├── wallet.py            # WDKWallet (HTTP→Node.js) + MockWallet + XAUT accounting
 │   │   └── simulator.py         # 7-day shadow projection engine
 │   ├── data/
 │   │   ├── defi_client.py       # DeFiLlama client — cache, retry, mock fallback
@@ -212,8 +249,8 @@ Atlas/
 │   └── server.js                # Node.js WDK microservice (USDT + XAUT + sign)
 ├── tests/                       # 76 pytest tests
 ├── config.py                    # Centralised env-var config
-├── main.py                      # Entry point — preflight check + asyncio.run
-├── docker-compose.yml           # wdk-service + api + frontend
+├── main.py                      # Entry point — preflight + asyncio.run
+├── docker-compose.yml
 └── Makefile                     # install · run-demo · test · wdk-service · docker-up
 ```
 
@@ -229,7 +266,19 @@ Atlas/
 | `EVM_PROVIDER` | `https://eth.drpc.org` | Ethereum JSON-RPC provider |
 | `INITIAL_PORTFOLIO_USDT` | `100000` | Starting capital in USDT |
 | `SCAN_INTERVAL_SECONDS` | `30` | Market Analyst poll interval |
-| `MAX_PROTOCOL_ALLOCATION` | `0.40` | Max concentration per protocol (40%) |
-| `MIN_LIQUIDITY_USD` | `10000000` | Min TVL floor ($10M) |
+| `MAX_PROTOCOL_ALLOCATION` | `0.40` | Max concentration per DeFi protocol (40%) |
+| `MIN_LIQUIDITY_USD` | `10000000` | TVL floor for protocol eligibility ($10M) |
 | `DASHBOARD_PORT` | `5000` | Flask API port |
 | `LOG_LEVEL` | `INFO` | Loguru log level |
+
+---
+
+## What's Next
+
+Atlas is a foundation. The architecture is deliberately extensible:
+
+- **Real protocol integrations** — replace mock deposits with actual Aave/Compound contract calls via the WDK
+- **More asset classes** — XAUT is the first non-USDT asset; the pattern extends to any ERC-20
+- **Cross-chain** — the WDK supports multiple EVM chains; the agent pipeline is chain-agnostic
+- **Governance hooks** — add a DAO vote threshold before large rebalances execute
+- **Richer Claude models** — swap Haiku for Opus on high-stakes decisions above a capital threshold

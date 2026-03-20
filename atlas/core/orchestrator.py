@@ -137,8 +137,10 @@ class Orchestrator:
         self,
         demo: bool = False,
         loop_interval: int | None = None,
+        max_cycles: int | None = None,
     ) -> None:
         self.demo = demo
+        self.max_cycles = max_cycles
         self._loop_interval = (
             loop_interval
             if loop_interval is not None
@@ -434,6 +436,10 @@ class Orchestrator:
         })
 
         while self._running:
+            if self.max_cycles and self._cycle_count >= self.max_cycles:
+                logger.info(f"[ORCHESTRATOR] Reached max_cycles={self.max_cycles} — stopping.")
+                break
+
             cycle_start = time.monotonic()
             retry_count = 0
 
