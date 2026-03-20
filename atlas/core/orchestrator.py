@@ -527,6 +527,13 @@ class Orchestrator:
                 "timestamp": ex.timestamp,
             }
 
+        # Fetch live on-chain balances from WDK service (best-effort)
+        onchain = {}
+        try:
+            onchain = self._wallet.get_onchain_balances()
+        except Exception:
+            pass
+
         return {
             "system_state":      self._state.value,
             "cycle_count":       self._cycle_count,
@@ -535,9 +542,11 @@ class Orchestrator:
                 "address":         self._wallet.address,
                 "total_value_usd": snap.total_value_usd,
                 "idle_usdt":       snap.idle_usdt,
+                "xaut_usd":        snap.xaut_usd,
                 "allocations":     snap.allocations,
                 "pnl_usd":         snap.pnl_usd,
                 "pnl_pct":         snap.pnl_pct,
+                "onchain_balances": onchain,  # live ETH/USDT/XAUT from WDK
             },
             "last_market_report":    last_report_info,
             "last_strategy":         last_strategy_info,
