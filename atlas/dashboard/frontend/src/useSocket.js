@@ -7,7 +7,9 @@ export function useSocket(maxEvents = 100) {
   const socketRef = useRef(null)
 
   useEffect(() => {
-    const socket = io('/ws/feed', { path: '/ws', transports: ['websocket'] })
+    // In production VITE_API_URL is the Railway backend URL; in dev Vite proxies.
+    const server = import.meta.env.VITE_API_URL || ''
+    const socket = io(server + '/ws/feed', { path: '/ws', transports: ['websocket'] })
     socketRef.current = socket
 
     socket.on('connect',    () => setConnected(true))

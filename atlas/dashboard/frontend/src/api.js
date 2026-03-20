@@ -1,4 +1,6 @@
-const BASE = '/api'
+// In production (Vercel), VITE_API_URL points to the Railway backend.
+// In dev, it's empty and Vite proxies /api → localhost:5000.
+const BASE = (import.meta.env.VITE_API_URL || '') + '/api'
 
 async function get(path) {
   const r = await fetch(`${BASE}${path}`)

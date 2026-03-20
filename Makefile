@@ -1,4 +1,4 @@
-.PHONY: install run-demo run-live test dashboard frontend wdk-service clean
+.PHONY: install run-demo run-live test dashboard frontend wdk-service clean devnet fund-wallet
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 install:
@@ -40,6 +40,13 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+# ── Devnet (Anvil mainnet fork) ───────────────────────────────────────────────
+devnet:
+	anvil --fork-url https://eth.drpc.org
+
+fund-wallet:
+	bash scripts/fund_wallet.sh
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 clean:

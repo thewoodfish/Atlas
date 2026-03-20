@@ -21,7 +21,7 @@ import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
 import { ethers } from 'ethers'
 import express from 'express'
 
-const PORT = process.env.WDK_SERVICE_PORT || 3001
+const PORT = process.env.PORT || process.env.WDK_SERVICE_PORT || 3001
 const PROVIDER = process.env.EVM_PROVIDER || 'https://eth.drpc.org'
 
 // USDT (ERC-20) on Ethereum mainnet
