@@ -21,6 +21,7 @@ import threading
 from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request, current_app
+from config import config
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from loguru import logger
@@ -76,6 +77,30 @@ _DEMO_TRANSACTIONS = [
     {"tx_type": "deposit",  "protocol": "Compound V3",   "amount_usd": 250.0,  "tx_hash": "0xabc3" + "0" * 60, "status": "confirmed"},
     {"tx_type": "withdraw", "protocol": "Curve Finance", "amount_usd": 100.0,  "tx_hash": "0xabc4" + "0" * 60, "status": "confirmed"},
     {"tx_type": "deposit",  "protocol": "Yearn Finance", "amount_usd": 100.0,  "tx_hash": "0xabc5" + "0" * 60, "status": "confirmed"},
+]
+
+
+_DEMO_AGENT_TRACES = [
+    {"agent": "Market Analyst",  "ts": time.time()-30, "cycle": 1, "decision": "bullish",
+     "detail": "Favour established lending protocols with stable TVL.",
+     "meta": {"opportunities": 6, "source": "DeFiLlama", "top_protocol": "Aave V3", "top_apy": 6.2}},
+    {"agent": "Strategy Agent",  "ts": time.time()-28, "cycle": 1, "decision": "3 strategies generated (sentiment: bullish)",
+     "detail": "Prioritises capital safety with established lending protocols.",
+     "meta": {"conservative_apy": 6.6, "balanced_apy": 7.1, "aggressive_apy": 9.8, "xaut_hedge": False}},
+    {"agent": "Risk Manager",    "ts": time.time()-25, "cycle": 1, "decision": "approved",
+     "detail": "Balanced strategy passes all hard rules. Claude qualitative review: diversified across lending and stable-swap with no concentration risk.",
+     "meta": {"selected": "Balanced", "flags": [], "capital_preservation": False}},
+    {"agent": "Simulator",       "ts": time.time()-22, "cycle": 1, "decision": "approved",
+     "detail": "$1,132.00 net return over 7 days | gas: $12.50",
+     "meta": {"projected_apy": 7.1, "net_return": 1132.0, "confidence": 0.91, "gas_usd": 12.5}},
+    {"agent": "Execution Agent", "ts": time.time()-18, "cycle": 1, "decision": "3 transactions executed",
+     "detail": "Trigger: scheduled | gas: $12.50",
+     "meta": {"tx_count": 3, "trigger": "scheduled", "gas_usd": 12.5, "portfolio": 100000.0}},
+]
+
+_DEMO_YIELD_EVENTS = [
+    {"ts": time.time()-15, "cycle": 1, "projected_yield_usd": 95.21, "threshold_usd": 50,
+     "to": "0xYourBeneficiary", "tx_hash": "0xpay1" + "0"*59, "status": "confirmed", "trigger": "threshold_crossed"},
 ]
 
 
@@ -343,6 +368,43 @@ def metrics():
         })
     except Exception as exc:
         logger.error(f"[API] /metrics error: {exc}")
+        return _err(str(exc))
+
+
+@api.route("/agent-traces")
+def agent_traces():
+    try:
+        orch = _get_orchestrator()
+        traces = list(reversed(orch._agent_traces[-20:])) if orch else _DEMO_AGENT_TRACES
+        return _ok(traces)
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@api.route("/yield-events")
+def yield_events():
+    try:
+        orch = _get_orchestrator()
+        events = list(reversed(orch._yield_payments)) if orch else _DEMO_YIELD_EVENTS
+        return _ok(events)
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@api.route("/control", methods=["POST"])
+def control():
+    try:
+        orch = _get_orchestrator()
+        action = (request.get_json(silent=True) or {}).get("action", "")
+        if orch:
+            if action == "pause":
+                orch.pause()
+            elif action == "resume":
+                orch.resume()
+            elif action == "stop":
+                orch.stop()
+        return _ok({"action": action, "applied": orch is not None})
+    except Exception as exc:
         return _err(str(exc))
 
 

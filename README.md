@@ -179,24 +179,42 @@ cd atlas/dashboard/frontend && npm run dev -- --port 3000
 
 ## Demo Walkthrough
 
-`make run-demo` seeds a **$100,000 USDT** treasury and runs two complete autonomous cycles:
+`make run-demo` seeds a **$100,000 USDT** treasury and runs two complete autonomous cycles.
 
-**Preflight** — Atlas validates the Anthropic API key and fails fast with a clear error if credentials are invalid.
+```bash
+# Terminal 1 — start the agent
+python3 main.py --demo
 
-**Cycle 1: Full pipeline**
-1. Market Analyst fetches live pools from DeFiLlama, filters to top 15 by TVL and quality, sends to Claude for risk-adjusted ranking
-2. Strategy Agent generates Conservative / Balanced / Aggressive strategies with full allocation rationale
-3. Risk Manager runs hard rules then a separate Claude qualitative review — both must pass
-4. Simulator projects a 7-day return with realistic gas and slippage; rejects if net return is negative
-5. Execution Agent deploys capital across approved allocations via the WDK wallet, signing each transaction
+# Terminal 2 — launch the dashboard
+cd atlas/dashboard/frontend && npm run dev -- --port 3000
+# → http://localhost:3000
+```
 
-**Cycle 2: Autonomous response to market shock**
-- 5 seconds after Cycle 1, a market shock is injected: Curve Finance APY collapses to 1%, TVL drops to $4M
-- Position monitor detects yield-drop and emergency TVL triggers simultaneously
-- Atlas **autonomously exits the position** — no human input required
-- If sentiment is bearish, the conservative strategy rotates 10–20% into **XAUT** as a gold hedge
+### What to watch — step by step
 
-**Dashboard** — every state transition, Claude decision, simulation result, and transaction streams live to the React frontend via WebSocket.
+| # | What happens | Where to look |
+|---|---|---|
+| 1 | Preflight validates Anthropic API key | Terminal logs |
+| 2 | `SCANNING` — Market Analyst fetches DeFiLlama, Claude ranks pools by risk-adjusted return | Activity Feed → `market_report` event |
+| 3 | `STRATEGIZING` — Strategy Agent asks Claude to generate 3 strategies; bearish → adds XAUT hedge | **Agent Decision Trace** panel → "Strategy Agent" node |
+| 4 | `RISK_CHECK` — Hard rules run, then a second Claude qualitative review; Capital Preservation activates if all fail | **Agent Decision Trace** → "Risk Manager" decision + reasoning |
+| 5 | `SIMULATING` — 7-day projection with L2 gas ($1.50–$3/tx) + slippage; rejected if net return < 0 | Agent Decision Trace → "Simulator" |
+| 6 | `EXECUTING` — Execution Agent deploys capital via WDK wallet, signs each tx | Transaction Table → new `deposit` rows with tx hashes |
+| 7 | **Yield payment** — if projected yield ≥ $50 threshold, Atlas autonomously pays USDT to beneficiary | **Autonomous Yield Payments** panel → confirmed payment card |
+| 8 | `MONITORING` — position monitor watches for yield drop >20%, TVL < $5M, drift >10pp | Guardrails panel → Autonomous Triggers |
+| 9 | **Market shock** (Cycle 2) — Curve APY → 1%, TVL → $4M injected automatically | Activity Feed → `demo_shock` event (amber) |
+| 10 | `REBALANCING` — monitor detects both triggers, Atlas exits without human input | Transaction Table → `withdraw` + `emergency` trigger |
+
+### Dashboard panels
+
+- **Agent Decision Trace** — live reasoning chain for every agent in the last cycle; shows Claude's exact rationale
+- **Autonomous Yield Payments** — payment lifecycle: projected yield → threshold check → WDK execute → tx hash
+- **Permissions & Guardrails** — all active risk limits and autonomous trigger thresholds
+- **PAUSE / RESUME / STOP** buttons in the header — control the agent without touching the terminal
+
+### Cycle 2: Autonomous response to market shock
+
+5 seconds after Cycle 1 completes, a market shock is injected: Curve Finance APY collapses to 1%, TVL drops to $4M. The position monitor detects both triggers simultaneously and Atlas **autonomously exits the position** — no human input required. If sentiment is bearish, the conservative strategy also rotates 10–20% into **XAUT** as a gold safe-haven hedge.
 
 ---
 

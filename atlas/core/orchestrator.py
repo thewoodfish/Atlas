@@ -191,6 +191,12 @@ class Orchestrator:
         )
 
         self._running = False
+        self._paused  = False
+
+        # Agent decision trace — rolling log exposed via /api/agent-traces
+        self._agent_traces: list[dict] = []
+        # Yield payment log — exposed via /api/yield-events
+        self._yield_payments: list[dict] = []
 
     # ── State helpers ─────────────────────────────────────────────────────────
 
@@ -234,6 +240,20 @@ class Orchestrator:
             "opportunities": len(report.top_opportunities),
             "source": report.data_source,
         })
+        top = report.top_opportunities[0] if report.top_opportunities else None
+        self._agent_traces.append({
+            "agent": "Market Analyst", "ts": time.time(), "cycle": self._cycle_count,
+            "decision": report.market_sentiment,
+            "detail": report.recommended_focus,
+            "meta": {
+                "opportunities": len(report.top_opportunities),
+                "source": report.data_source,
+                "top_protocol": top.opportunity.protocol if top else None,
+                "top_apy": round(top.opportunity.apy, 2) if top else None,
+            },
+        })
+        if len(self._agent_traces) > 100:
+            self._agent_traces = self._agent_traces[-100:]
         return report
 
     async def _step_strategize(self, report: MarketReport) -> StrategyBundle:
@@ -247,6 +267,20 @@ class Orchestrator:
             "balanced_yield":     bundle.balanced.expected_yield,
             "aggressive_yield":   bundle.aggressive.expected_yield,
         })
+        xaut_hedge = any("XAUT" in s.allocations for s in bundle.as_list())
+        self._agent_traces.append({
+            "agent": "Strategy Agent", "ts": time.time(), "cycle": self._cycle_count,
+            "decision": f"3 strategies generated (sentiment: {bundle.based_on_sentiment})",
+            "detail": bundle.conservative.rationale,
+            "meta": {
+                "conservative_apy": round(bundle.conservative.expected_yield, 2),
+                "balanced_apy":     round(bundle.balanced.expected_yield, 2),
+                "aggressive_apy":   round(bundle.aggressive.expected_yield, 2),
+                "xaut_hedge":       xaut_hedge,
+            },
+        })
+        if len(self._agent_traces) > 100:
+            self._agent_traces = self._agent_traces[-100:]
         return bundle
 
     async def _step_risk_check(self, bundle: StrategyBundle) -> RiskAssessment:
@@ -261,6 +295,18 @@ class Orchestrator:
             "risk_flags":           assessment.risk_flags,
             "is_capital_preservation": assessment.is_capital_preservation,
         })
+        self._agent_traces.append({
+            "agent": "Risk Manager", "ts": time.time(), "cycle": self._cycle_count,
+            "decision": "approved" if assessment.approved else "rejected",
+            "detail": assessment.reasoning or f"Selected: {assessment.selected_strategy.name}",
+            "meta": {
+                "selected":            assessment.selected_strategy.name,
+                "flags":               assessment.risk_flags,
+                "capital_preservation": assessment.is_capital_preservation,
+            },
+        })
+        if len(self._agent_traces) > 100:
+            self._agent_traces = self._agent_traces[-100:]
         return assessment
 
     async def _step_simulate(
@@ -282,6 +328,19 @@ class Orchestrator:
             "projected_apy":   simulation.projected_apy,
             "confidence":      simulation.confidence_score,
         })
+        self._agent_traces.append({
+            "agent": "Simulator", "ts": time.time(), "cycle": self._cycle_count,
+            "decision": "approved" if simulation.approved else f"rejected: {simulation.rejection_reason}",
+            "detail": f"${simulation.net_return:.2f} net return over 7 days | gas: ${simulation.estimated_gas_usd:.2f}",
+            "meta": {
+                "projected_apy": round(simulation.projected_apy, 2),
+                "net_return":    round(simulation.net_return, 4),
+                "confidence":    round(simulation.confidence_score, 2),
+                "gas_usd":       round(simulation.estimated_gas_usd, 2),
+            },
+        })
+        if len(self._agent_traces) > 100:
+            self._agent_traces = self._agent_traces[-100:]
         return simulation
 
     async def _step_execute(
@@ -306,6 +365,19 @@ class Orchestrator:
             "pnl_usd":        snap.pnl_usd if snap else None,
             "pnl_pct":        snap.pnl_pct if snap else None,
         })
+        self._agent_traces.append({
+            "agent": "Execution Agent", "ts": time.time(), "cycle": self._cycle_count,
+            "decision": f"{len(exec_report.transactions)} transactions executed",
+            "detail": f"Trigger: {exec_report.trigger} | gas: ${exec_report.total_gas_used:.2f}",
+            "meta": {
+                "tx_count":  len(exec_report.transactions),
+                "trigger":   exec_report.trigger,
+                "gas_usd":   round(exec_report.total_gas_used, 2),
+                "portfolio": round(snap.total_value_usd, 2) if snap else None,
+            },
+        })
+        if len(self._agent_traces) > 100:
+            self._agent_traces = self._agent_traces[-100:]
         return exec_report
 
     # ── Yield payout ───────────────────────────────────────────────────────────
@@ -336,6 +408,17 @@ class Orchestrator:
         )
         try:
             tx = self._wallet.pay_yield(payout_address, round(projected_yield_usd, 2))
+            payment = {
+                "ts":                   time.time(),
+                "cycle":                self._cycle_count,
+                "projected_yield_usd":  round(projected_yield_usd, 2),
+                "threshold_usd":        threshold,
+                "to":                   payout_address,
+                "tx_hash":              tx.tx_hash,
+                "status":               "confirmed",
+                "trigger":              "threshold_crossed",
+            }
+            self._yield_payments.append(payment)
             self._emit_event("yield_payment", {
                 "amount_usd":  round(projected_yield_usd, 2),
                 "to":          payout_address,
@@ -483,6 +566,10 @@ class Orchestrator:
         })
 
         while self._running:
+            # Honour pause: spin in a low-frequency wait loop
+            while self._paused and self._running:
+                await asyncio.sleep(1)
+
             if self.max_cycles and self._cycle_count >= self.max_cycles:
                 logger.info(f"[ORCHESTRATOR] Reached max_cycles={self.max_cycles} — stopping.")
                 break
@@ -524,6 +611,16 @@ class Orchestrator:
 
     def stop(self) -> None:
         self._running = False
+
+    def pause(self) -> None:
+        self._paused = True
+        self._emit_event("control", {"action": "paused"})
+        logger.info("[ORCHESTRATOR] Paused by control request")
+
+    def resume(self) -> None:
+        self._paused = False
+        self._emit_event("control", {"action": "resumed"})
+        logger.info("[ORCHESTRATOR] Resumed by control request")
 
     def get_system_status(self) -> dict:
         """
@@ -585,6 +682,7 @@ class Orchestrator:
             "system_state":      self._state.value,
             "cycle_count":       self._cycle_count,
             "demo_mode":         self.demo,
+            "paused":            self._paused,
             "wallet": {
                 "address":         self._wallet.address,
                 "total_value_usd": snap.total_value_usd,

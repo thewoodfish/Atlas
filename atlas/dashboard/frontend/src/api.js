@@ -15,3 +15,7 @@ export const fetchTransactions = (page = 1, perPage = 20) =>
   get(`/transactions?page=${page}&per_page=${perPage}`)
 export const fetchMetrics      = () => get('/metrics')
 export const fetchGuardrails   = () => get('/guardrails')
+export const fetchAgentTraces  = () => get('/agent-traces')
+export const fetchYieldEvents  = () => get('/yield-events')
+export const postControl       = (action) =>
+  fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }).then(r => r.json())

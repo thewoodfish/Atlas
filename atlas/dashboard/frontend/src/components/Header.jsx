@@ -1,7 +1,15 @@
-export default function Header({ status, connected }) {
-  const state = status?.system_state ?? 'IDLE'
-  const addr  = status?.wallet?.address ?? '0x000…'
-  const short = addr ? addr.slice(0, 6) + '…' + addr.slice(-4) : '—'
+const Btn = ({ label, color, onClick }) => (
+  <button onClick={onClick} style={{
+    padding: '3px 10px', borderRadius: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+    background: `${color}22`, color, border: `1px solid ${color}55`, cursor: 'pointer',
+  }}>{label}</button>
+)
+
+export default function Header({ status, connected, onControl }) {
+  const state    = status?.system_state ?? 'IDLE'
+  const paused   = status?.paused ?? false
+  const addr     = status?.wallet?.address ?? '0x000…'
+  const short    = addr ? addr.slice(0, 6) + '…' + addr.slice(-4) : '—'
   const isActive = ['SCANNING','STRATEGIZING','RISK_CHECK','SIMULATING','EXECUTING','MONITORING','REBALANCING'].includes(state)
 
   return (
@@ -46,6 +54,16 @@ export default function Header({ status, connected }) {
             background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
             DEMO
           </span>
+        )}
+
+        {onControl && (
+          <div className="flex items-center gap-1">
+            {paused
+              ? <Btn label="RESUME" color="#22c55e" onClick={() => onControl('resume')} />
+              : <Btn label="PAUSE"  color="#f59e0b" onClick={() => onControl('pause')}  />
+            }
+            <Btn label="STOP" color="#ef4444" onClick={() => onControl('stop')} />
+          </div>
         )}
       </div>
     </header>

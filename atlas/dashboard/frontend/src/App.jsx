@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchStatus, fetchPortfolio, fetchOpportunities, fetchStrategies, fetchTransactions, fetchMetrics, fetchGuardrails } from './api'
+import { fetchStatus, fetchPortfolio, fetchOpportunities, fetchStrategies, fetchTransactions, fetchMetrics, fetchGuardrails, fetchAgentTraces, fetchYieldEvents, postControl } from './api'
 import { useSocket } from './useSocket'
 import Header from './components/Header'
 import MetricsBar from './components/MetricsBar'
@@ -9,6 +9,8 @@ import ActivityFeed from './components/ActivityFeed'
 import TransactionTable from './components/TransactionTable'
 import OpportunitiesTable from './components/OpportunitiesTable'
 import GuardrailsPanel from './components/GuardrailsPanel'
+import AgentDecisionPanel from './components/AgentDecisionPanel'
+import PaymentFlow from './components/PaymentFlow'
 
 const REFRESH_MS = 10_000
 
@@ -20,6 +22,8 @@ export default function App() {
   const [transactions,  setTransactions]  = useState(null)
   const [metrics,       setMetrics]       = useState(null)
   const [guardrails,    setGuardrails]    = useState(null)
+  const [agentTraces,   setAgentTraces]   = useState(null)
+  const [yieldEvents,   setYieldEvents]   = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [lastRefresh,   setLastRefresh]   = useState(null)
 
@@ -27,9 +31,10 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p, o, st, t, m, g] = await Promise.allSettled([
+      const [s, p, o, st, t, m, g, at, ye] = await Promise.allSettled([
         fetchStatus(), fetchPortfolio(), fetchOpportunities(),
         fetchStrategies(), fetchTransactions(), fetchMetrics(), fetchGuardrails(),
+        fetchAgentTraces(), fetchYieldEvents(),
       ])
       if (s.status  === 'fulfilled') setStatus(s.value)
       if (p.status  === 'fulfilled') setPortfolio(p.value)
@@ -38,6 +43,8 @@ export default function App() {
       if (t.status  === 'fulfilled') setTransactions(t.value)
       if (m.status  === 'fulfilled') setMetrics(m.value)
       if (g.status  === 'fulfilled') setGuardrails(g.value)
+      if (at.status === 'fulfilled') setAgentTraces(at.value)
+      if (ye.status === 'fulfilled') setYieldEvents(ye.value)
       setLastRefresh(new Date())
     } catch (e) {
       console.error('Refresh error', e)
@@ -53,14 +60,19 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => {
-    if (events.length > 0 && ['execution_report','state_change'].includes(events[0].type)) {
+    if (events.length > 0 && ['execution_report','state_change','control'].includes(events[0].type)) {
       refresh()
     }
   }, [events])
 
+  const handleControl = useCallback(async (action) => {
+    await postControl(action)
+    setTimeout(refresh, 500)
+  }, [refresh])
+
   return (
     <div style={{ minHeight: '100vh', background: '#020617' }}>
-      <Header status={status} connected={connected} />
+      <Header status={status} connected={connected} onControl={handleControl} />
 
       <main style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <MetricsBar metrics={metrics} status={status} loading={loading} />
@@ -71,7 +83,13 @@ export default function App() {
           <ActivityFeed events={events} connected={connected} />
         </div>
 
-        <GuardrailsPanel guardrails={guardrails} loading={loading} />
+        <AgentDecisionPanel traces={agentTraces} loading={loading} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <GuardrailsPanel guardrails={guardrails} loading={loading} />
+          <PaymentFlow events={yieldEvents} loading={loading} />
+        </div>
+
         <OpportunitiesTable opportunities={opportunities} loading={loading} />
         <TransactionTable transactions={transactions} loading={loading} />
 
