@@ -37,7 +37,7 @@ from atlas.agents.market_analyst import MarketAnalystAgent
 from atlas.agents.risk_manager import RiskManagerAgent
 from atlas.agents.strategy_agent import StrategyAgent
 from atlas.core.simulator import Simulator
-from atlas.core.wallet import MockWallet
+from atlas.core.wallet import WDKWallet
 from atlas.data.models import (
     ExecutionReport,
     MarketReport,
@@ -165,8 +165,9 @@ class Orchestrator:
                 os.remove(db_path)
                 logger.info(f"[ORCHESTRATOR] Demo mode: removed stale database {db_path!r}")
 
-        # Infrastructure
-        self._wallet = MockWallet()
+        # Infrastructure — WDKWallet connects to the Node.js WDK microservice
+        # and degrades gracefully to MockWallet accounting if the service is offline
+        self._wallet = WDKWallet()
         self._simulator = Simulator()
         self._db = _OrchestratorDB(config.database_url)
 
