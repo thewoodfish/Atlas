@@ -28,4 +28,6 @@ ENV DASHBOARD_HOST=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD curl -sf "http://localhost:${PORT:-5000}/health" || exit 1
 
-CMD ["python", "main.py"]
+# Default: dashboard + API only (no agent, no Anthropic credits consumed).
+# To run the full autonomous agent, set START_MODE=agent in Railway env vars.
+CMD sh -c 'if [ "$START_MODE" = "agent" ]; then python main.py; else python main.py --no-agent; fi'

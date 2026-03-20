@@ -3,8 +3,9 @@ Atlas entry point.
 
 Usage:
     python main.py               # run the full autonomous loop + dashboard
+    python main.py --demo        # run the demo scenario (2 cycles, market shock)
+    python main.py --no-agent    # dashboard + API only, no orchestrator (Railway/Vercel preview)
     python main.py --no-dashboard
-    python main.py --demo        # run the demo scenario (1000 USDT seed)
 """
 from __future__ import annotations
 
@@ -71,14 +72,20 @@ async def _preflight_check() -> None:
         sys.exit(1)
 
 
-async def run(demo: bool = False, with_dashboard: bool = True, max_cycles: int | None = None) -> None:
+async def run(
+    demo: bool = False,
+    with_dashboard: bool = True,
+    with_agent: bool = True,
+    max_cycles: int | None = None,
+) -> None:
     from atlas.core.orchestrator import Orchestrator
+    from atlas.dashboard.backend.app import create_app
 
-    orchestrator = Orchestrator(demo=demo, max_cycles=max_cycles)
+    # In no-agent mode pass orchestrator=None so the dashboard serves demo data
+    orchestrator = Orchestrator(demo=demo, max_cycles=max_cycles) if with_agent else None
 
     if with_dashboard:
         import threading
-        from atlas.dashboard.backend.app import create_app
 
         app, socketio = create_app(orchestrator=orchestrator)
         dashboard_thread = threading.Thread(
@@ -97,7 +104,12 @@ async def run(demo: bool = False, with_dashboard: bool = True, max_cycles: int |
             f"Dashboard running at http://{config.dashboard_host}:{config.dashboard_port}"
         )
 
-    await orchestrator.run()
+    if with_agent:
+        await orchestrator.run()
+    else:
+        # Block forever — keep the dashboard alive without running the agent
+        logger.info("Running in dashboard-only mode (--no-agent). No Anthropic calls will be made.")
+        await asyncio.Event().wait()
 
 
 def main() -> None:
@@ -109,12 +121,26 @@ def main() -> None:
         "--demo", action="store_true", help="Run the demo scenario"
     )
     parser.add_argument(
+        "--no-agent", action="store_true",
+        help="Start dashboard + API only; skip the orchestrator (no Anthropic calls)"
+    )
+    parser.add_argument(
         "--max-cycles", type=int, default=None, help="Stop after N cycles (default: run forever)"
     )
     args = parser.parse_args()
 
     _configure_logging()
     logger.info("Atlas starting up")
+
+    # --no-agent: skip API key check and orchestrator entirely
+    if args.no_agent:
+        async def _main() -> None:
+            await run(with_dashboard=True, with_agent=False)
+        try:
+            asyncio.run(_main())
+        except KeyboardInterrupt:
+            logger.info("Atlas shut down gracefully.")
+        return
 
     if not config.anthropic_api_key:
         logger.error(
