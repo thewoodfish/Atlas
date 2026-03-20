@@ -266,6 +266,26 @@ def transactions():
         return _err(str(exc))
 
 
+@api.route("/guardrails")
+def guardrails():
+    try:
+        return _ok({
+            "max_protocol_allocation_pct": config.max_protocol_allocation * 100,
+            "min_tvl_usd":                 config.min_liquidity_usd,
+            "max_risk_score":              8,
+            "max_volatility_pct":          config.max_volatility_threshold * 100,
+            "emergency_exit_tvl_usd":      5_000_000,
+            "yield_drop_trigger_pct":      20,
+            "drift_trigger_pct":           10,
+            "yield_payout_address":        config.yield_payout_address or None,
+            "yield_payout_threshold_usd":  config.yield_payout_threshold_usd,
+            "xaut_hedge":                  "10–20% when sentiment is bearish/volatile",
+            "capital_preservation":        "Activated if all strategies fail risk checks",
+        })
+    except Exception as exc:
+        return _err(str(exc))
+
+
 @api.route("/metrics")
 def metrics():
     try:

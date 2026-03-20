@@ -14,3 +14,4 @@ export const fetchStrategies   = () => get('/strategies')
 export const fetchTransactions = (page = 1, perPage = 20) =>
   get(`/transactions?page=${page}&per_page=${perPage}`)
 export const fetchMetrics      = () => get('/metrics')
+export const fetchGuardrails   = () => get('/guardrails')

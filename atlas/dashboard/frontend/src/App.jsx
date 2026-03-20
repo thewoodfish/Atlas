@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchStatus, fetchPortfolio, fetchOpportunities, fetchStrategies, fetchTransactions, fetchMetrics } from './api'
+import { fetchStatus, fetchPortfolio, fetchOpportunities, fetchStrategies, fetchTransactions, fetchMetrics, fetchGuardrails } from './api'
 import { useSocket } from './useSocket'
 import Header from './components/Header'
 import MetricsBar from './components/MetricsBar'
@@ -8,6 +8,7 @@ import PortfolioChart from './components/PortfolioChart'
 import ActivityFeed from './components/ActivityFeed'
 import TransactionTable from './components/TransactionTable'
 import OpportunitiesTable from './components/OpportunitiesTable'
+import GuardrailsPanel from './components/GuardrailsPanel'
 
 const REFRESH_MS = 10_000
 
@@ -18,6 +19,7 @@ export default function App() {
   const [strategies,    setStrategies]    = useState(null)
   const [transactions,  setTransactions]  = useState(null)
   const [metrics,       setMetrics]       = useState(null)
+  const [guardrails,    setGuardrails]    = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [lastRefresh,   setLastRefresh]   = useState(null)
 
@@ -25,9 +27,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p, o, st, t, m] = await Promise.allSettled([
+      const [s, p, o, st, t, m, g] = await Promise.allSettled([
         fetchStatus(), fetchPortfolio(), fetchOpportunities(),
-        fetchStrategies(), fetchTransactions(), fetchMetrics(),
+        fetchStrategies(), fetchTransactions(), fetchMetrics(), fetchGuardrails(),
       ])
       if (s.status  === 'fulfilled') setStatus(s.value)
       if (p.status  === 'fulfilled') setPortfolio(p.value)
@@ -35,6 +37,7 @@ export default function App() {
       if (st.status === 'fulfilled') setStrategies(st.value)
       if (t.status  === 'fulfilled') setTransactions(t.value)
       if (m.status  === 'fulfilled') setMetrics(m.value)
+      if (g.status  === 'fulfilled') setGuardrails(g.value)
       setLastRefresh(new Date())
     } catch (e) {
       console.error('Refresh error', e)
@@ -68,6 +71,7 @@ export default function App() {
           <ActivityFeed events={events} connected={connected} />
         </div>
 
+        <GuardrailsPanel guardrails={guardrails} loading={loading} />
         <OpportunitiesTable opportunities={opportunities} loading={loading} />
         <TransactionTable transactions={transactions} loading={loading} />
 
