@@ -18,6 +18,7 @@
 
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
+import { ethers } from 'ethers'
 import express from 'express'
 
 const PORT = process.env.WDK_SERVICE_PORT || 3001
@@ -37,6 +38,18 @@ const ERC20_ABI_MINIMAL = [
 // ── WDK initialisation ────────────────────────────────────────────────────────
 
 const SEED_PHRASE = process.env.WDK_SEED_PHRASE || WDK.getRandomSeedPhrase()
+
+// Ethers provider for receipt polling (independent of WDK internals)
+const provider = new ethers.JsonRpcProvider(PROVIDER)
+
+// Wait for a tx to be confirmed (1 block, 30 s timeout). Returns receipt or null.
+async function awaitConfirmation(txHash) {
+  try {
+    return await provider.waitForTransaction(txHash, 1, 30_000)
+  } catch (_) {
+    return null
+  }
+}
 
 let wdk = null
 let account = null
@@ -124,27 +137,51 @@ app.get('/wallet/balance', async (req, res) => {
 
 app.post('/wallet/send-usdt', async (req, res) => {
   if (!requireWallet(res)) return
-  const { to, amount } = req.body
+  const { to, amount, wait_confirmation = true } = req.body
   if (!to || !amount) return err(res, 'Missing required fields: to, amount', 400)
   try {
     console.log(`[WDK] Sending ${amount} USDT → ${to}`)
     const amountUnits = BigInt(Math.round(Number(amount) * 1e6))  // USDT 6 decimals
     const txHash = await account.sendToken(USDT_ADDRESS, to, amountUnits)
     console.log(`[WDK] USDT tx submitted  hash=${txHash}`)
-    ok(res, { tx_hash: txHash, asset: 'USDT', amount, to })
+    let status = 'pending'
+    let blockNumber = null
+    let gasUsed = null
+    if (wait_confirmation) {
+      const receipt = await awaitConfirmation(txHash)
+      if (receipt) {
+        status = receipt.status === 1 ? 'confirmed' : 'failed'
+        blockNumber = receipt.blockNumber
+        gasUsed = receipt.gasUsed?.toString()
+        console.log(`[WDK] USDT tx ${status}  block=${blockNumber}  gas=${gasUsed}`)
+      }
+    }
+    ok(res, { tx_hash: txHash, asset: 'USDT', amount, to, status, block_number: blockNumber, gas_used: gasUsed })
   } catch (e) { err(res, e.message) }
 })
 
 app.post('/wallet/send-xaut', async (req, res) => {
   if (!requireWallet(res)) return
-  const { to, amount } = req.body
+  const { to, amount, wait_confirmation = true } = req.body
   if (!to || !amount) return err(res, 'Missing required fields: to, amount', 400)
   try {
     console.log(`[WDK] Sending ${amount} XAUT → ${to}`)
     const amountUnits = BigInt(Math.round(Number(amount) * 1e6))  // XAUT 6 decimals
     const txHash = await account.sendToken(XAUT_ADDRESS, to, amountUnits)
     console.log(`[WDK] XAUT tx submitted  hash=${txHash}`)
-    ok(res, { tx_hash: txHash, asset: 'XAUT', amount, to })
+    let status = 'pending'
+    let blockNumber = null
+    let gasUsed = null
+    if (wait_confirmation) {
+      const receipt = await awaitConfirmation(txHash)
+      if (receipt) {
+        status = receipt.status === 1 ? 'confirmed' : 'failed'
+        blockNumber = receipt.blockNumber
+        gasUsed = receipt.gasUsed?.toString()
+        console.log(`[WDK] XAUT tx ${status}  block=${blockNumber}  gas=${gasUsed}`)
+      }
+    }
+    ok(res, { tx_hash: txHash, asset: 'XAUT', amount, to, status, block_number: blockNumber, gas_used: gasUsed })
   } catch (e) { err(res, e.message) }
 })
 

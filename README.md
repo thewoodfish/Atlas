@@ -303,6 +303,14 @@ Atlas/
 
 ---
 
+## Hackathon Disclosure
+
+This project was built from scratch during the hackathon period. No prior codebase was reused. All agents, wallet integration, simulation engine, dashboard, and tests were written during the event.
+
+**Open-source dependencies used:** Anthropic SDK, Tether WDK (`@tetherto/wdk`, `@tetherto/wdk-wallet-evm`), DeFiLlama public API, Flask, React, Pydantic, SQLAlchemy — all standard open-source libraries. No proprietary or pre-written agent logic was carried in.
+
+---
+
 ## What's Next
 
 Atlas is a foundation. The architecture is deliberately extensible:
