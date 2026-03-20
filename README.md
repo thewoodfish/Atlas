@@ -280,8 +280,8 @@ Atlas/
 
 Atlas is a foundation. The architecture is deliberately extensible:
 
-- **Real protocol integrations** — replace mock deposits with actual Aave/Compound contract calls via the WDK
-- **More asset classes** — XAUT is the first non-USDT asset; the pattern extends to any ERC-20
-- **Cross-chain** — the WDK supports multiple EVM chains; the agent pipeline is chain-agnostic
-- **Governance hooks** — add a DAO vote threshold before large rebalances execute
-- **Richer Claude models** — swap Haiku for Opus on high-stakes decisions above a capital threshold
+- **Full ABI protocol calls** — Atlas already sends real USDT on-chain via WDK; the next step is calling Aave's `deposit()` / Compound's `supply()` directly with encoded calldata, turning transfers into actual yield-bearing positions
+- **More asset classes** — XAUT is the first non-USDT asset; the pattern extends to any ERC-20 (wBTC, stETH, USDC)
+- **Cross-chain** — the WDK supports multiple EVM chains; the agent pipeline is chain-agnostic; Arbitrum and Base are the natural next targets
+- **Governance hooks** — add a DAO vote threshold before large rebalances execute, making Atlas safe for community-governed treasuries
+- **Richer Claude models** — swap Haiku for Opus on high-stakes decisions above a configurable capital threshold
