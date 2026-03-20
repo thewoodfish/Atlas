@@ -29,6 +29,7 @@ Most DeFi automation tools are rule-based scripts that execute a fixed strategy.
 | Pre-trade | None | 7-day shadow simulation with gas + slippage models |
 | Execution | Manual trigger | Fully autonomous; monitors positions every 60s |
 | On-chain | Signed messages | **Real USDT transfers to protocol addresses via WDK — verifiable on Etherscan** |
+| Payments | Manual | **Agent autonomously pays harvested yield to a beneficiary when threshold is crossed** |
 | Downside | Exit manually | Auto-emergency-exit on TVL crisis or yield collapse |
 | Safe haven | USDT only | **Rotates to XAUT (Tether Gold) when sentiment turns bearish** |
 
@@ -86,6 +87,30 @@ Most DeFi automation tools are rule-based scripts that execute a fixed strategy.
 | 3 | **Risk Manager** | `StrategyBundle` → `RiskAssessment` | Layer 1: hard rules (≤40% concentration, TVL ≥$10M, risk score ≤8, volatility flag). Layer 2: Claude qualitative review. XAUT exempt from DeFi pool checks. Falls back to capital-preservation if all strategies fail |
 | 4 | **Simulator** | `RiskAssessment` → `SimulationResult` | 7-day compounding projection with per-protocol gas ($1.50–$3/tx on L2) and slippage (2–8 bps); XAUT modelled as 0% APY store-of-value; rejects strategy if net return < 0 |
 | 5 | **Execution Agent** | `SimulationResult` → `ExecutionReport` | Deploys capital via WDK; buys XAUT when hedging; monitors every 60s; auto-exits on yield drop >20%, TVL < $5M, or allocation drift >10pp |
+
+---
+
+## Autonomous Yield Payments
+
+Atlas doesn't just manage yield — it **pays it out automatically**.
+
+After every execution cycle, the Orchestrator checks whether the projected 7-day yield exceeds a configured threshold. If it does, it autonomously calls `pay_yield()` which routes a real USDT transfer to the beneficiary address via the WDK `send_usdt()` endpoint — no human trigger required.
+
+```
+Cycle completes → projected yield $95 ≥ threshold $50
+  → Orchestrator._step_pay_yield()
+  → WDKWallet.pay_yield(YIELD_PAYOUT_ADDRESS, $95)
+  → WDK send_usdt() → real on-chain tx hash
+  → yield_payment event → dashboard activity feed
+```
+
+Configure in `.env`:
+```bash
+YIELD_PAYOUT_ADDRESS=0xYourBeneficiaryAddress
+YIELD_PAYOUT_THRESHOLD_USD=50
+```
+
+This is programmable, agent-driven commerce: the agent observes yield, makes an autonomous payment decision, and executes a real on-chain transfer — all without human input.
 
 ---
 
@@ -268,6 +293,8 @@ Atlas/
 | `WDK_SERVICE_URL` | `http://localhost:3001` | WDK microservice base URL |
 | `EVM_PROVIDER` | `https://eth.drpc.org` | Ethereum JSON-RPC provider |
 | `INITIAL_PORTFOLIO_USDT` | `100000` | Starting capital in USDT |
+| `YIELD_PAYOUT_ADDRESS` | — | Beneficiary address for autonomous yield payments (disabled if unset) |
+| `YIELD_PAYOUT_THRESHOLD_USD` | `50` | Minimum projected yield (USD) to trigger an autonomous payout |
 | `SCAN_INTERVAL_SECONDS` | `30` | Market Analyst poll interval |
 | `MAX_PROTOCOL_ALLOCATION` | `0.40` | Max concentration per DeFi protocol (40%) |
 | `MIN_LIQUIDITY_USD` | `10000000` | TVL floor for protocol eligibility ($10M) |
@@ -280,7 +307,7 @@ Atlas/
 
 Atlas is a foundation. The architecture is deliberately extensible:
 
-- **Full ABI protocol calls** — Atlas already sends real USDT on-chain via WDK; the next step is calling Aave's `deposit()` / Compound's `supply()` directly with encoded calldata, turning transfers into actual yield-bearing positions
+- **Full ABI protocol calls** — Atlas already sends real USDT on-chain and pays out yield autonomously via WDK; the next step is calling Aave's `deposit()` / Compound's `supply()` directly with encoded calldata, turning transfers into actual yield-bearing positions
 - **More asset classes** — XAUT is the first non-USDT asset; the pattern extends to any ERC-20 (wBTC, stETH, USDC)
 - **Cross-chain** — the WDK supports multiple EVM chains; the agent pipeline is chain-agnostic; Arbitrum and Base are the natural next targets
 - **Governance hooks** — add a DAO vote threshold before large rebalances execute, making Atlas safe for community-governed treasuries
