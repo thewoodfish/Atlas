@@ -28,6 +28,7 @@ Most DeFi automation tools are rule-based scripts that execute a fixed strategy.
 | Risk | Hard rules only | Hard rules **and** independent Claude qualitative review |
 | Pre-trade | None | 7-day shadow simulation with gas + slippage models |
 | Execution | Manual trigger | Fully autonomous; monitors positions every 60s |
+| On-chain | Signed messages | **Real USDT transfers to protocol addresses via WDK — verifiable on Etherscan** |
 | Downside | Exit manually | Auto-emergency-exit on TVL crisis or yield collapse |
 | Safe haven | USDT only | **Rotates to XAUT (Tether Gold) when sentiment turns bearish** |
 
@@ -112,6 +113,8 @@ Atlas ships a dedicated **Node.js microservice** (`wdk_service/`) that wraps the
 - `POST /wallet/send-xaut` — on-chain XAUT transfer
 - `POST /wallet/sign` — EIP-191 message signing (audit trail for every rebalance and XAUT hedge)
 - Python `WDKWallet` calls the service over HTTP; degrades gracefully to simulation when the service is offline
+- **Real on-chain transfers:** every `deposit()` calls `send_usdt()` to the protocol's mainnet contract address — producing a real, Etherscan-verifiable tx hash when the wallet is funded. Falls back to EIP-191 sign-only audit trail if balance is insufficient
+- **Live balance polling:** `get_system_status()` fetches live ETH / USDT / XAUT balances from the WDK service on every dashboard refresh
 
 ```bash
 # Start the WDK service standalone
