@@ -73,7 +73,7 @@ class Config:
     )
     dashboard_port: int = field(
         # Railway injects PORT; fall back to DASHBOARD_PORT for local/Docker
-        default_factory=lambda: int(os.getenv("PORT") or os.getenv("DASHBOARD_PORT", "5000"))
+        default_factory=lambda: int(os.getenv("PORT") or os.getenv("DASHBOARD_PORT", "8080"))
     )
     dashboard_debug: bool = field(
         default_factory=lambda: os.getenv("DASHBOARD_DEBUG", "false").lower() == "true"

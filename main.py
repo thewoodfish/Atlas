@@ -106,10 +106,10 @@ async def run(
 
     if with_agent:
         await orchestrator.run()
-    else:
-        # Block forever — keep the dashboard alive without running the agent
-        logger.info("Running in dashboard-only mode (--no-agent). No Anthropic calls will be made.")
-        await asyncio.Event().wait()
+
+    # Keep the dashboard alive even after the orchestrator stops (e.g. --max-cycles)
+    logger.info("Agent stopped. Dashboard still running — press Ctrl+C to quit.")
+    await asyncio.Event().wait()
 
 
 def main() -> None:

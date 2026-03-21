@@ -173,6 +173,8 @@ class Orchestrator:
 
         # Event bus — broadcast to dashboard / WebSocket subscribers
         self._event_bus: asyncio.Queue = asyncio.Queue(maxsize=500)
+        # Rolling replay buffer — last 50 events sent to late-connecting clients
+        self._recent_events: list[dict] = []
 
         # Per-agent queues (not used for direct calls below, but available
         # for running agents in concurrent mode)
@@ -213,6 +215,9 @@ class Orchestrator:
             "payload": payload,
             "ts": time.time(),
         }
+        self._recent_events.append(event)
+        if len(self._recent_events) > 50:
+            self._recent_events = self._recent_events[-50:]
         try:
             self._event_bus.put_nowait(event)
         except asyncio.QueueFull:

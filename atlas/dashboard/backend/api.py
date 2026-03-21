@@ -422,6 +422,10 @@ def register_socketio_events(socketio: SocketIO) -> None:
         else:
             status_data = {"system_state": "IDLE", "demo_mode": True}
         emit("connected", {"success": True, "initial_state": status_data})
+        # Replay recent events so late-connecting clients see the full history
+        if orch and orch._recent_events:
+            for ev in orch._recent_events:
+                emit(ev.get("type", "event"), {"payload": ev.get("payload"), "ts": ev.get("ts")})
 
     @socketio.on("disconnect", namespace="/ws/feed")
     def on_disconnect():
