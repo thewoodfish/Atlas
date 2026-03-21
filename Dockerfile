@@ -26,7 +26,7 @@ ENV DASHBOARD_HOST=0.0.0.0
 
 # Health check — Railway uses this to decide when the service is ready
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD curl -sf "http://localhost:${PORT:-5000}/health" || exit 1
+  CMD curl -sf "http://localhost:${PORT:-8080}/health" || exit 1
 
 # Default: dashboard + API only (no agent, no Anthropic credits consumed).
 # To run the full autonomous agent, set START_MODE=agent in Railway env vars.
