@@ -144,7 +144,9 @@ def _build_user_message(report: MarketReport) -> str:
     return "\n".join(lines)
 
 
-def _parse_strategy(raw: dict[str, Any], default_name: str) -> StrategyModel:
+def _parse_strategy(raw: Any, default_name: str) -> StrategyModel:
+    if not isinstance(raw, dict):
+        raw = {}
     return StrategyModel(
         name=raw.get("name", default_name),
         allocations=raw.get("allocations", {}),

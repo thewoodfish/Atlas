@@ -110,6 +110,8 @@ def _assemble_report(
 
     ranked: list[RankedOpportunity] = []
     for item in tool_input.get("ranked_opportunities", []):
+        if not isinstance(item, dict):
+            continue
         pool_id = item.get("pool_id", "")
         opp = opp_by_id.get(pool_id)
         if opp is None:
