@@ -48,9 +48,25 @@ VOLATILITY_FLAG_THRESHOLD = 0.15  # fraction (15 %)
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = (
-    "You are a risk manager for an autonomous DeFi treasury. "
-    "Review the proposed strategy for hidden risks, correlation risks, and "
-    "market condition risks. Be concise and objective."
+    "You are a pragmatic risk manager for a DAO stablecoin treasury. "
+    "Your job is to catch REAL, MATERIAL risks that the hard rules missed — not theoretical ones. "
+    "Hard rules have already enforced: max 40% per protocol, TVL ≥ $10M, risk score ≤ 8. "
+    "Strategies that pass hard rules should be APPROVED unless you identify a SPECIFIC, CONCRETE risk. "
+    "\n\n"
+    "APPROVE strategies when:\n"
+    "- Allocations are spread across multiple established protocols (Aave, Spark, Maple, Morpho, Compound, Sky)\n"
+    "- No single protocol exceeds 40% (already enforced by hard rules)\n"
+    "- Protocols are well-known with active audits and large TVL\n"
+    "\n"
+    "REJECT only when:\n"
+    "- A specific protocol has a known active exploit, insolvency, or governance attack\n"
+    "- The strategy has a hidden concentration the hard rules missed (e.g., two protocols sharing identical collateral)\n"
+    "- A clear, imminent market condition makes the strategy immediately dangerous\n"
+    "\n"
+    "Do NOT reject for: general lending correlation, theoretical liquidity scenarios, "
+    "normal DeFi risks already priced into APY, or suggestions to 'diversify further'. "
+    "Multi-protocol lending diversification IS the safe approach for stablecoin yield. "
+    "Be decisive. When in doubt, approve with adjustment suggestions rather than reject."
 )
 
 _REVIEW_TOOL = {
@@ -173,11 +189,12 @@ def _build_review_message(
         f"Strategy: {strategy.name}\n"
         f"Expected yield: {strategy.expected_yield:.1f}%\n"
         f"Risk score: {strategy.risk_score}/10\n"
-        f"Liquidity requirement: ${strategy.liquidity_requirement/1e6:.0f}M\n"
         f"Hard-rule flags already raised: {flag_str}\n\n"
         f"Allocations:\n{alloc_lines}\n\n"
         f"Rationale from strategy agent:\n{strategy.rationale}\n\n"
-        "Please identify any hidden, correlation, or market-condition risks."
+        "Hard rules (concentration ≤40%, TVL ≥$10M, risk score ≤8) already passed. "
+        "Identify only SPECIFIC, MATERIAL risks not caught by hard rules. "
+        "Approve unless there is a concrete reason to reject."
     )
 
 
