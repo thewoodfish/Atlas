@@ -20,9 +20,10 @@ export function useSocket(maxEvents = 100) {
       'simulation_result', 'execution_report', 'yield_payment', 'demo_shock', 'error',
     ]
     EVENTS.forEach(type => {
-      socket.on(type, payload => {
+      socket.on(type, data => {
         setEvents(prev => {
-          const entry = { type, payload, ts: Date.now() }
+          // Server sends { payload: {...}, ts: ... } — unwrap the inner payload
+          const entry = { type, payload: data?.payload ?? data, ts: data?.ts ?? Date.now() }
           return [entry, ...prev].slice(0, maxEvents)
         })
       })
