@@ -84,6 +84,11 @@ class Config:
         default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///atlas.db")
     )
 
+    # ── Offline / simulation mode ─────────────────────────────────────────────
+    offline_mode: bool = field(
+        default_factory=lambda: os.getenv("ATLAS_OFFLINE", "false").lower() == "true"
+    )
+
     # ── Logging ──────────────────────────────────────────────────────────────
     log_level: str = field(
         default_factory=lambda: os.getenv("LOG_LEVEL", "INFO")

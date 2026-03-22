@@ -325,9 +325,12 @@ class RiskManagerAgent:
 
         logger.info(
             f"[RISK MANAGER] {strategy.name} passed hard rules "
-            f"(flags={[f.value for f in hard_flags] or 'none'}), "
-            "sending to Claude for qualitative review…"
+            f"(flags={[f.value for f in hard_flags] or 'none'})"
+            + (", skipping Claude (offline mode)" if config.offline_mode else ", sending to Claude for qualitative review…")
         )
+
+        if config.offline_mode:
+            return True, hard_flags, [], "Offline mode — hard rules passed, auto-approved."
 
         # Layer 2
         approved, extra_flags, adjustments, reasoning = await self._qualitative_review(

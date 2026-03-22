@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -127,15 +128,34 @@ def main() -> None:
     parser.add_argument(
         "--max-cycles", type=int, default=None, help="Stop after N cycles (default: run forever)"
     )
+    parser.add_argument(
+        "--offline", action="store_true",
+        help="Skip all Claude API calls; use rule-based logic with live DeFiLlama data"
+    )
     args = parser.parse_args()
 
+    if args.offline:
+        os.environ["ATLAS_OFFLINE"] = "true"
+        # Re-read config so the singleton picks up the flag
+        config.offline_mode = True
+
     _configure_logging()
-    logger.info("Atlas starting up")
+    logger.info("Atlas starting up" + (" [OFFLINE MODE — no Claude calls]" if config.offline_mode else ""))
 
     # --no-agent: skip API key check and orchestrator entirely
     if args.no_agent:
         async def _main() -> None:
             await run(with_dashboard=True, with_agent=False)
+        try:
+            asyncio.run(_main())
+        except KeyboardInterrupt:
+            logger.info("Atlas shut down gracefully.")
+        return
+
+    # --offline: skip API key check too
+    if config.offline_mode:
+        async def _main() -> None:  # type: ignore[no-redef]
+            await run(demo=args.demo, with_dashboard=not args.no_dashboard, max_cycles=args.max_cycles)
         try:
             asyncio.run(_main())
         except KeyboardInterrupt:

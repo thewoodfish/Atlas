@@ -182,6 +182,25 @@ class MarketAnalystAgent:
                 data_source=fetch.source,
             )
 
+        if config.offline_mode:
+            logger.info("[MARKET ANALYST] Offline mode — ranking by APY, skipping Claude")
+            ranked = sorted(fetch.opportunities, key=lambda o: o.apy, reverse=True)[:15]
+            return MarketReport(
+                top_opportunities=[
+                    RankedOpportunity(
+                        opportunity=o,
+                        rank=i + 1,
+                        risk_adjusted_score=round(o.apy / max(o.volatility_7d + 0.01, 0.01), 2),
+                        rationale=f"Top APY {o.apy:.1f}% with TVL ${o.tvl_usd/1e6:.0f}M",
+                    )
+                    for i, o in enumerate(ranked)
+                ],
+                market_sentiment=MarketSentiment.BULLISH,
+                recommended_focus="High-yield stablecoin lending across established protocols",
+                data_source=fetch.source,
+                timestamp=time.time(),
+            )
+
         user_message = _build_user_message(fetch)
         logger.debug(f"[MARKET ANALYST] Sending {len(fetch.opportunities)} pools to Claude")
 

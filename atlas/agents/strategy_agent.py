@@ -272,6 +272,10 @@ class StrategyAgent:
             logger.warning("[STRATEGY AGENT] Empty report — using rule-based fallback")
             return _fallback_bundle(report)
 
+        if config.offline_mode:
+            logger.info("[STRATEGY AGENT] Offline mode — using rule-based strategies, skipping Claude")
+            return _fallback_bundle(report)
+
         user_message = _build_user_message(report)
         logger.debug(
             f"[STRATEGY AGENT] Sending {len(report.top_opportunities)} ranked "
