@@ -443,26 +443,36 @@ class Orchestrator:
 
     async def _inject_demo_shock(self) -> None:
         """
-        Simulate a market condition change mid-run:
-        Drops Curve Finance APY to 1% and TVL to $4M to trigger both
-        a yield-drop and an emergency exit on the next monitor cycle.
+        Simulate a market condition change mid-run.
+        Collapses APY and TVL on the largest allocated protocol to trigger
+        an emergency exit on the next monitor cycle.
         """
+        if not self._last_market_report:
+            return
+
+        # Pick the protocol with the largest current allocation, fall back to
+        # the first opportunity in the market report.
+        deployed = getattr(self._wallet, "_deployed", {})
+        if deployed:
+            target = max(deployed, key=lambda p: deployed[p])
+        else:
+            target = self._last_market_report.top_opportunities[0].opportunity.protocol
+
         logger.warning(
-            "[ORCHESTRATOR] DEMO: injecting market shock — "
-            "Curve Finance APY → 1%, TVL → $4M"
+            f"[ORCHESTRATOR] DEMO: injecting market shock — "
+            f"{target} APY → 1%, TVL → $4M"
         )
-        if self._last_market_report:
-            for ro in self._last_market_report.top_opportunities:
-                if "curve" in ro.opportunity.protocol.lower():
-                    object.__setattr__(ro.opportunity, "apy", 1.0)
-                    object.__setattr__(ro.opportunity, "tvl_usd", 4_000_000)
-            opps = [ro.opportunity for ro in self._last_market_report.top_opportunities]
-            self._execution_agent.update_opportunities(opps)
-            self._emit_event("demo_shock", {
-                "protocol": "Curve Finance",
-                "new_apy": 1.0,
-                "new_tvl_usd": 4_000_000,
-            })
+        for ro in self._last_market_report.top_opportunities:
+            if ro.opportunity.protocol.lower() == target.lower():
+                object.__setattr__(ro.opportunity, "apy", 1.0)
+                object.__setattr__(ro.opportunity, "tvl_usd", 4_000_000)
+        opps = [ro.opportunity for ro in self._last_market_report.top_opportunities]
+        self._execution_agent.update_opportunities(opps)
+        self._emit_event("demo_shock", {
+            "protocol": target,
+            "new_apy": 1.0,
+            "new_tvl_usd": 4_000_000,
+        })
 
     # ── Full cycle ─────────────────────────────────────────────────────────────
 

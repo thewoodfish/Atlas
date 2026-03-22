@@ -160,87 +160,98 @@ def _parse_strategy(raw: Any, default_name: str) -> StrategyModel:
 def _fallback_bundle(report: MarketReport) -> StrategyBundle:
     """Rule-based fallback when Claude is unavailable."""
     opps = [ro.opportunity for ro in report.top_opportunities]
+
+    def _build_alloc(candidates: list, n: int, max_pct: float = 40.0) -> dict[str, float]:
+        """Pick up to n distinct protocols, cap each at max_pct, equal weight."""
+        seen: dict[str, float] = {}
+        for o in candidates:
+            if o.protocol not in seen and len(seen) < n:
+                seen[o.protocol] = 0.0
+        if not seen:
+            return {}
+        pct = min(round(100.0 / len(seen), 1), max_pct)
+        return {p: pct for p in seen}
+
+    def _weighted_yield(allocs: dict[str, float], src: list) -> float:
+        apy_map = {o.protocol: o.apy for o in src}
+        total_pct = sum(allocs.values())
+        if total_pct == 0:
+            return 0.0
+        return sum(apy_map.get(p, 0) * pct / total_pct for p, pct in allocs.items())
+
     if not opps:
-        placeholder = {"Aave V3": 100.0}
+        fallback_alloc = {"Aave V3": 40.0, "Compound": 35.0, "Sky Lending": 25.0}
         return StrategyBundle(
             conservative=StrategyModel(
-                name="Conservative",
-                allocations=placeholder,
-                expected_yield=5.0,
+                name="Capital Preservation — Established Lending",
+                allocations=fallback_alloc,
+                expected_yield=4.0,
                 risk_score=2,
                 liquidity_requirement=10_000_000,
-                rationale="Fallback: no opportunities available.",
+                rationale="No live data — default allocation across established money markets.",
             ),
             balanced=StrategyModel(
-                name="Balanced",
-                allocations=placeholder,
-                expected_yield=7.0,
+                name="Balanced Yield — Multi-Protocol",
+                allocations=fallback_alloc,
+                expected_yield=5.5,
                 risk_score=5,
                 liquidity_requirement=10_000_000,
-                rationale="Fallback: no opportunities available.",
+                rationale="No live data — balanced multi-protocol allocation.",
             ),
             aggressive=StrategyModel(
-                name="Aggressive",
-                allocations=placeholder,
-                expected_yield=10.0,
-                risk_score=8,
+                name="Yield Maximiser — High APY",
+                allocations=fallback_alloc,
+                expected_yield=7.0,
+                risk_score=7,
                 liquidity_requirement=5_000_000,
-                rationale="Fallback: no opportunities available.",
+                rationale="No live data — yield-focused allocation.",
             ),
             based_on_sentiment=report.market_sentiment,
         )
 
-    # Sort by APY and build simple rule-based allocations
     by_apy = sorted(opps, key=lambda o: o.apy, reverse=True)
-    lending = [o for o in by_apy if o.pool_type in ("lending",)]
-    vaults = [o for o in by_apy if o.pool_type in ("yield_vault",)]
-    stable = [o for o in by_apy if o.pool_type in ("stable_swap",)]
+    by_tvl = sorted(opps, key=lambda o: o.tvl_usd, reverse=True)
 
-    def _even_split(protocols: list, cap: float = 100.0) -> dict[str, float]:
-        if not protocols:
-            return {by_apy[0].protocol: 100.0}
-        pct = round(cap / len(protocols), 2)
-        result: dict[str, float] = {}
-        for p in protocols:
-            result[p.protocol] = result.get(p.protocol, 0.0) + pct
-        return result
-
-    cons_pool = (lending or by_apy)[:3]
-    bal_pool = (lending + stable or by_apy)[:4]
-    agg_pool = by_apy[:5]
-
-    def _weighted_yield(allocs: dict[str, float], src: list) -> float:
-        apy_map = {o.protocol: o.apy for o in src}
-        return sum(apy_map.get(p, 0) * pct / 100 for p, pct in allocs.items())
-
-    c_alloc = _even_split(cons_pool)
-    b_alloc = _even_split(bal_pool)
-    a_alloc = _even_split(agg_pool)
+    # Conservative: top-4 by TVL (safest), capped at 35% each
+    c_alloc = _build_alloc(by_tvl, 4, max_pct=35.0)
+    # Balanced: top-4 by APY but capped at 30% each for spread
+    b_alloc = _build_alloc(by_apy, 4, max_pct=30.0)
+    # Aggressive: top-5 by APY, up to 40% each
+    a_alloc = _build_alloc(by_apy, 5, max_pct=40.0)
 
     return StrategyBundle(
         conservative=StrategyModel(
-            name="Conservative",
+            name="Capital Preservation with Steady Yield",
             allocations=c_alloc,
-            expected_yield=round(_weighted_yield(c_alloc, cons_pool), 2),
+            expected_yield=round(_weighted_yield(c_alloc, by_tvl), 2),
             risk_score=3,
             liquidity_requirement=10_000_000,
-            rationale="Fallback rule-based: lending protocols, equal weight.",
+            rationale=(
+                "Allocates to the four highest-TVL protocols for maximum liquidity safety. "
+                "Equal-weight capped at 35% to avoid concentration risk."
+            ),
         ),
         balanced=StrategyModel(
-            name="Balanced",
+            name="Diversified Institutional Credit",
             allocations=b_alloc,
-            expected_yield=round(_weighted_yield(b_alloc, bal_pool), 2),
+            expected_yield=round(_weighted_yield(b_alloc, by_apy), 2),
             risk_score=5,
             liquidity_requirement=10_000_000,
-            rationale="Fallback rule-based: lending + stable-swap, equal weight.",
+            rationale=(
+                "Balances yield and risk across four top-APY protocols. "
+                "30% cap per protocol ensures no single-protocol concentration."
+            ),
         ),
         aggressive=StrategyModel(
-            name="Aggressive",
+            name="Yield Maximiser — High Conviction",
             allocations=a_alloc,
-            expected_yield=round(_weighted_yield(a_alloc, agg_pool), 2),
-            risk_score=8,
+            expected_yield=round(_weighted_yield(a_alloc, by_apy), 2),
+            risk_score=7,
             liquidity_requirement=5_000_000,
-            rationale="Fallback rule-based: top-5 by APY, equal weight.",
+            rationale=(
+                "Concentrates on the top-5 yield opportunities. "
+                "Higher APY comes with moderately elevated protocol risk."
+            ),
         ),
         based_on_sentiment=report.market_sentiment,
     )
