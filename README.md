@@ -12,6 +12,10 @@
 
 ---
 
+![Atlas Dashboard](assets/Screenshot%202026-03-21%20at%2022.12.58.png)
+
+---
+
 DAOs and crypto-native funds collectively hold billions in stablecoins sitting idle in multi-sigs. Nobody's managing it — allocations are debated in Discord, executed manually, and never optimised.
 
 **Atlas fixes this.** It is a fully autonomous multi-agent system that continuously monitors DeFi yield markets, reasons about risk using Claude, simulates outcomes before touching capital, executes rebalancing, and — when markets turn — rotates into XAUT (Tether Gold) as a safe-haven hedge. When accumulated yield crosses a threshold, it pays out autonomously to a beneficiary address via Tether WDK — no human trigger required.
@@ -109,6 +113,8 @@ The Railway backend is scanning real DeFiLlama data (18,000+ pools), running Cla
 | 5 | **Execution Agent** | `SimulationResult` → `ExecutionReport` | Deploys capital via WDK; buys XAUT when hedging; monitors every 30s; auto-exits on yield drop >20%, TVL < $5M, or allocation drift >10pp |
 
 ---
+
+![Agent Decision Trace & Guardrails](assets/Screenshot%202026-03-21%20at%2021.25.13.png)
 
 ## Autonomous Yield Payments
 
@@ -221,6 +227,10 @@ open http://localhost:8080
 - **PAUSE / RESUME / STOP** — control the agent without touching the terminal
 
 ---
+
+![Opportunities & Transactions](assets/Screenshot%202026-03-21%20at%2022.13.37.png)
+
+![Live Activity Feed & Agent Traces](assets/Screenshot%202026-03-21%20at%2023.53.15.png)
 
 ## Running Tests
 
